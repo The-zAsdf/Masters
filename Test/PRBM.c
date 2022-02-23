@@ -1,18 +1,25 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <math.h>
 #include "matOperations.h"
+#include "measureTime.h"
 
 float **master;
 float **prev;
+float ***kMat;
 
-#define W 10
-#define J 10
+float W;
+float J;
+int N;
+float h;
+int steps;
 
 void init() {
     time_t t;
     srand((unsigned) time(&t));
     master = malloc(sizeof(float*)*N);
     prev = malloc(sizeof(float*)*N);
+    kMat = malloc(sizeof(float*)*4);
 
     for(int i = 0; i < N; i++) {
         master[i] = malloc(sizeof(float)*(N-i));
@@ -25,6 +32,15 @@ void init() {
             }
         }
     }
+
+    for (int i = 0; i < 4; i++) {
+        kMat[i] = malloc(sizeof(float*)*N);
+        for (int j = 0; j < N; j++) {
+            kMat[i][j] = malloc(sizeof(float*)*(N-i));
+        }
+    }
+
+    resetMat(prev);
 }
 
 float funcJ(int i, int j, float **mat) {
@@ -53,13 +69,87 @@ float funch(int i, float **mat) {
     return 2*m;
 }
 
-float nextJ(int i, int j) {
+void updateMat() {
+    float h = 0.5;
+    float l = 0.0;
+    float ln = l+2.0*h;
+    copyMat(master, prev);
 
+    while (l < ln) {
+        // Calculating all k1
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N-i; j++) {
+                if (i == j) {
+                    kMat[0][i][j] = funch(i, master);
+                } else {
+                    kMat[0][i][j] = funcJ(i, j, master);
+                }
+            }
+        }
+
+        // Calculating all k2
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N-i; j++) {
+                if (i == j) {
+                    master[i][j] += h*kMat[0][i][j]/2.0;
+                    kMat[1][i][j] = funch(i, master);
+                } else {
+                    master[i][j] += h*kMat[0][i][j]/2.0;
+                    kMat[1][i][j] = funcJ(i, j, master);
+                }
+            }
+        }
+
+        copyMat(prev, master);
+        // Calculating all k3
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N-i; j++) {
+                if (i == j) {
+                    master[i][j] += h*kMat[1][i][j]/2.0;
+                    kMat[2][i][j] = funch(i, master);
+                } else {
+                    master[i][j] += h*kMat[1][i][j]/2.0;
+                    kMat[2][i][j] = funcJ(i, j, master);
+                }
+            }
+        }
+
+        copyMat(prev, master);
+        // Calculating all k4
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N-i; j++) {
+                if (i == j) {
+                    master[i][j] += h*kMat[2][i][j];
+                    kMat[3][i][j] = funch(i, master);
+                } else {
+                    master[i][j] += h*kMat[2][i][j];
+                    kMat[3][i][j] = funcJ(i, j, master);
+                }
+            }
+        }
+
+        copyMat(prev, master);
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N-i; j++) {
+                master[i][j] += h*(kMat[0][i][j] + 2*kMat[1][i][j] + 2*kMat[2][i][j] + kMat[3][i][j])/6.0;
+            }
+        }
+
+        l += h;
+    }
 }
 
+double run() {
+    int s = 0;
+    setVar(&W, &J, &N, &h, &steps);
+    init();
 
-
-void updateMat() {
-    copyMat(master, prev);
+    startTime();
+    while (s < steps) {
+        updateMat();
+        s++;
+    }
+    endTime();
+    return runTime();
 
 }
