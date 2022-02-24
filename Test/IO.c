@@ -1,80 +1,82 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "IO.h"
 
-typedef struct Variables{
-    float W;
-    float J;
-    float h;
-    int R; // repitition
-    int N[10];
-    int index = 0;
-    int steps;
-} var;
-
-void readInput(const char *fileName, var *v) {
+void readInput(const char *fileName, Var *v) {
     FILE *fp;
     char buff[255];
+    char *token;
     if ((fp = fopen(fileName, "r")) == NULL) {
         fprintf(stderr, "Error: No filename found\n");
         exit(1);
     } else {
-        while (fscanf(fp, "%s", buff) != EOF) {
+        while (fgets(buff, 255, fp) != NULL) {
             switch (buff[0]) {
                 case 'W':
-                    if (fscanf(fp, "%f", v->W) != (EOF || 0)) {
-                        printf("W: %f\n", v->W);
-                    } else {
-                        fprintf(stderr, "Error: Input error for W");
-                        exit(2);
-                    }
+                    token = strtok(buff, " ");
+                    v->W = atof(strtok(NULL, " "));
+                    break;
                 case 'J':
-                    if (fscanf(fp, "%f", v->J) != (EOF || 0)) {
-                        printf("J: %f\n", v->J);
-                    } else {
-                        fprintf(stderr, "Error: Input error for J");
-                        exit(2);
-                    }
-                case 'R':
-                    if (fscanf(fp, "%d", v->R) != (EOF || 0)) {
-                        printf("R: %d\n", v->R);
-                    } else {
-                        fprintf(stderr, "Error: Input error for R");
-                        exit(2);
-                    }
-                case 'S':
-                    if (fscanf(fp, "%d", v->steps) != (EOF || 0)) {
-                        printf("steps: %d\n", v->steps);
-                    } else {
-                        fprintf(stderr, "Error: Input error for steps");
-                        exit(2);
-                    }
+                    token = strtok(buff, " ");
+                    v->J = atof(strtok(NULL, " "));
+                    break;
                 case 'h':
-                    if (fscanf(fp, "%f", v->h) != (EOF || 0)) {
-                        printf("steps: %f\n", v->h);
-                    } else {
-                        fprintf(stderr, "Error: Input error for h");
-                        exit(2);
-                    }
+                    token = strtok(buff, " ");
+                    v->h = atof(strtok(NULL, " "));
+                    break;
+                case 'R':
+                    token = strtok(buff, " ");
+                    v->R = atoi(strtok(NULL, " "));
+                    break;
+                case 'S':
+                    token = strtok(buff, " ");
+                    v->steps = atoi(strtok(NULL, " "));
+                    break;
                 case 'N':
+                    token = strtok(buff, " ");
                     for (int i = 0; i < v->R; i++) {
-                        if (fscanf(fp, "%d", v->N[i]) != (EOF || 0)) {
-                            printf("N: %d\n", v->N);
-                        } else {
-                            fprintf(stderr, "Error: Input error for N");
-                            exit(2);
-                        }
+                        v->N[i] = atoi(strtok(NULL, " "));
                     }
+                    break;
             }
         }
+
+        v->index = 0;
         fclose(fp);
     }
 }
 
-void setupVar(float *w, float *j, float *h, int *size, int *steps, var *v) {
-    *w = v->W;
-    *j = v->J;
-    *h = v->h;
-    *size = v->N[index];
-    *steps = v->steps;
+void outputData (const char *fileName, int *x, double *y, int len) {
+    FILE *fp;
+    int l;
+    char str[255];
+    char *dir = "data/";
+    char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    printf("%s", str);
+
+    fp = fopen(str,"w+");
+
+    for (int i = 0; i < len; i++) {
+        printf("x: %d\t y: %f\n", x[i], y[i]);
+        fprintf(fp, "%d,%f\n", x[i], y[i]);
+        fflush(fp);
+    }
+    fclose(fp);
+}
+
+void printVar(Var *var) {
+    printf("W: %f\n", var->W);
+    printf("J: %f\n", var->J);
+    printf("h: %f\n", var->h);
+    printf("R: %f\n", var->R);
+    printf("N:");
+    for (int i = 0; i < var->R; i++) { printf(" %d", var->N[i]); }
+    printf("\n");
+    printf("steps: %d", var->steps);
 }

@@ -139,9 +139,14 @@ void updateMat() {
     }
 }
 
-double run() {
+double runPRBM(float w, float j, float hh, int n, int ss) {
     int s = 0;
-    setVar(&W, &J, &N, &h, &steps);
+    W = w;
+    J = j;
+    h = hh;
+    N = n;
+    steps = ss;
+
     init();
 
     startTime();
