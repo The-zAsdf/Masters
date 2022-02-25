@@ -74,7 +74,7 @@ void printVar(Var *var) {
     printf("W: %f\n", var->W);
     printf("J: %f\n", var->J);
     printf("h: %f\n", var->h);
-    printf("R: %f\n", var->R);
+    printf("R: %d\n", var->R);
     printf("N:");
     for (int i = 0; i < var->R; i++) { printf(" %d", var->N[i]); }
     printf("\n");
