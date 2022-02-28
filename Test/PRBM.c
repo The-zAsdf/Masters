@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <time.h>
 #include <math.h>
 #include "matOperations.h"
@@ -148,13 +149,14 @@ double runPRBM(float w, float j, float hh, int n, int ss) {
     steps = ss;
 
     init();
-
+    printf("Starting...");
     startTime();
     while (s < steps) {
         updateMat();
         s++;
     }
     endTime();
+    printf("Done\n");
     return runTime();
 
 }

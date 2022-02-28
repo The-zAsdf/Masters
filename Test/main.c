@@ -6,6 +6,7 @@
 void main() {
     Var *g = malloc(sizeof(struct Variables));
     double *t;
+
     readInput("input.txt", g);
     t = malloc(sizeof(double)*g->R);
     printVar(g);

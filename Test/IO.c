@@ -53,19 +53,23 @@ void outputData (const char *fileName, int *x, double *y, int len) {
     char str[255];
     char *dir = "data/";
     char *ext = ".txt";
+    int bytes;
 
     strcpy(str, dir);
     strcat(str, fileName);
     strcat(str, ext);
 
-    printf("%s", str);
+    printf("%s\n", str);
 
-    fp = fopen(str,"w+");
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(1);
+    }
 
     for (int i = 0; i < len; i++) {
         printf("x: %d\t y: %f\n", x[i], y[i]);
-        fprintf(fp, "%d,%f\n", x[i], y[i]);
-        fflush(fp);
+        bytes = fprintf(fp, "%d,%f\n", x[i], y[i]);
+        printf("num bytes printed: %d\n", bytes);
     }
     fclose(fp);
 }
@@ -78,5 +82,5 @@ void printVar(Var *var) {
     printf("N:");
     for (int i = 0; i < var->R; i++) { printf(" %d", var->N[i]); }
     printf("\n");
-    printf("steps: %d", var->steps);
+    printf("steps: %d\n", var->steps);
 }
