@@ -12,31 +12,32 @@ void readInput(const char *fileName, Var *v) {
         exit(1);
     } else {
         while (fgets(buff, 255, fp) != NULL) {
+            token = strtok(buff, " ");
             switch (buff[0]) {
                 case 'W':
-                    token = strtok(buff, " ");
-                    v->W = atof(strtok(NULL, " "));
+                    token = strtok(NULL, " ");
+                    v->W = atof(token);
                     break;
                 case 'J':
-                    token = strtok(buff, " ");
-                    v->J = atof(strtok(NULL, " "));
+                    token = strtok(NULL, " ");
+                    v->J = atof(token);
                     break;
                 case 'h':
-                    token = strtok(buff, " ");
-                    v->h = atof(strtok(NULL, " "));
+                    token = strtok(NULL, " ");
+                    v->h = atof(token);
                     break;
                 case 'R':
-                    token = strtok(buff, " ");
-                    v->R = atoi(strtok(NULL, " "));
+                    token = strtok(NULL, " ");
+                    v->R = atoi(token);
                     break;
                 case 'S':
-                    token = strtok(buff, " ");
-                    v->steps = atoi(strtok(NULL, " "));
+                    token = strtok(NULL, " ");
+                    v->steps = atoi(token);
                     break;
                 case 'N':
-                    token = strtok(buff, " ");
                     for (int i = 0; i < v->R; i++) {
-                        v->N[i] = atoi(strtok(NULL, " "));
+                        token = strtok(NULL, " ");
+                        v->N[i] = atoi(token);
                     }
                     break;
             }
@@ -49,11 +50,9 @@ void readInput(const char *fileName, Var *v) {
 
 void outputData (const char *fileName, int *x, double *y, int len) {
     FILE *fp;
-    int l;
     char str[255];
-    char *dir = "data/";
-    char *ext = ".txt";
-    int bytes;
+    const char *dir = "data/";
+    const char *ext = ".txt";
 
     strcpy(str, dir);
     strcat(str, fileName);
@@ -67,9 +66,7 @@ void outputData (const char *fileName, int *x, double *y, int len) {
     }
 
     for (int i = 0; i < len; i++) {
-        printf("x: %d\t y: %f\n", x[i], y[i]);
-        bytes = fprintf(fp, "%d,%f\n", x[i], y[i]);
-        printf("num bytes printed: %d\n", bytes);
+        fprintf(fp,"%d,%f\n", x[i], y[i]);
     }
     fclose(fp);
 }

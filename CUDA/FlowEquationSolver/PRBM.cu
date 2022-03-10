@@ -20,8 +20,8 @@ __managed__ float J;
 __managed__ int N;
 __managed__ int numElem;    // Number of elements
 __managed__ float h;
-size_t tpb;     // Threads per block
-size_t nob;     // Number of blocks
+__managed__ size_t tpb;     // Threads per block
+__managed__ size_t nob;     // Number of blocks
 int steps;                  // Total simulation steps
 
 
@@ -92,11 +92,13 @@ __global__ void SUMKMAT(float ***k, float **dst) {
 __global__ void generateMaster() {
     int i;
     int j;
-    int id = blockIdx.x * blockDim.x + threadIdx.x;
-
+    int id = threadIdx.x + blockIdx.x*blockDim.x;
     if (id < numElem) {
         i = threadIndex[id]->x;
         j = threadIndex[id]->y;
+        if (j >= N-i || id >= numElem || i >= N) {
+            printf("id = %d (%d,%d) (%d)\n",id, i, j, N-i);
+        }
         // Placeholder, please change ASAP.
         if (j == 0) {
             master[i][0] = (float)10.0/(float)(RAND_MAX/W);
@@ -106,7 +108,7 @@ __global__ void generateMaster() {
     }
 }
 
-void setVariables(Var *v) {
+void setVariables(struct Variables *v) {
     W = v->W;
     J = v->J;
     N = v->N[v->index];
@@ -120,6 +122,9 @@ void setVariables(Var *v) {
         }
     }
     determineThreadsAndBlocks();
+    printf("\tnumElem: %d\n", numElem);
+    printf("\tnob: %zu\n", nob);
+    printf("\ttpb: %zu\n", tpb);
 }
 
 size_t calculateBlocks(size_t threads) {
@@ -167,8 +172,22 @@ void init() {
     err = cudaMallocManaged(&kMat, sizeof(float*)*4);
     if (err != cudaSuccess) CUDAERROR(err);
 
-    err = cudaMallocManaged(&threadIndex, sizeof(struct index)*numElem);
+    err = cudaMallocManaged(&threadIndex, sizeof(struct index *)*numElem);
     if (err != cudaSuccess) CUDAERROR(err);
+    for (int i = 0; i < numElem; i++) {
+        err = cudaMallocManaged(&threadIndex[i], sizeof(struct index));
+        if (err != cudaSuccess) CUDAERROR(err);
+    }
+
+    // threadIndex
+    count = 0;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N-i; j++) {
+            threadIndex[count]->x = i;
+            threadIndex[count]->y = j;
+            count++;
+        }
+    }
 
     // master and history
     for (int i = 0; i < N; i++){
@@ -177,10 +196,10 @@ void init() {
 
         err = cudaMallocManaged(&temp[i], sizeof(float)*(N-i));
         if (err != cudaSuccess) CUDAERROR(err);
-        for (int j = 0; j < N-i; j++) {
-            generateMaster<<<nob,tpb>>>();
-        }
     }
+
+    generateMaster<<<nob,tpb>>>();
+    checkCudaSyncErr();
 
     // history
     for (int i = 0; i < SAVES; i++) {
@@ -199,16 +218,6 @@ void init() {
         for (int j = 0; j < N; j++) {
             err = cudaMallocManaged(&kMat[i][j], sizeof(float)*(N-j));
             if (err != cudaSuccess) CUDAERROR(err);
-        }
-    }
-
-    // threadIndex
-    count = 0;
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N-i; j++) {
-            threadIndex[count]->x = i;
-            threadIndex[count]->y = j;
-            count++;
         }
     }
 }
@@ -303,10 +312,16 @@ void updateMat() {
     checkCudaSyncErr();
 }
 
-double runPRBM(Var *v) {
+double runPRBM(struct Variables *v) {
+    printf("Setting variables:\n");
     setVariables(v);
+    printf("Done\nInitializing:... ");
     init();
+    printf("Done\nStarting simulation:\n");
+    startTime();
     for (int s = 0; s < steps; s++) { updateMat(); }
+    endTime();
+    printf("Done\n");
     freeMem();
-    return 0.0;
+    return runTime();
 }

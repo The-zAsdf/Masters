@@ -1,15 +1,15 @@
-#ifndef PRBM_CUH
-#define PRBM_CUH
+#ifndef PRBM_H
+#define PRBM_H
 
 typedef struct index{
     int x;
     int y;
 } ind;
 
-void setVariables(Variables *v);
+void setVariables(struct Variables *v);
 size_t calculateBlocks(size_t threads);
 void determineThreadsAndBlocks();
 void init();
-double runPRBM(Variables *v);
+double runPRBM(struct Variables *v);
 
 #endif

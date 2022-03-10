@@ -3,12 +3,12 @@
 #include "IO.h"
 #include "PRBM.h"
 
-void main() {
-    Var *g = malloc(sizeof(struct Variables));
+int main() {
+    Var *g = (Var *) malloc(sizeof(struct Variables));
     double *t;
 
     readInput("input.txt", g);
-    t = malloc(sizeof(double)*g->R);
+    t = (double *) malloc(sizeof(double)*g->R);
     printVar(g);
 
     while (g->index < g->R) {
@@ -19,4 +19,5 @@ void main() {
 
     free(g);
     free(t);
+    return 0;
 }

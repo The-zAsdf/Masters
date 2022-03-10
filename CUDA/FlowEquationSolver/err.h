@@ -7,5 +7,7 @@
 void checkCudaSyncErr();
 void printErr(int flag);
 void printCudaErr(cudaError_t err);
+void printCudaAsyncErr(cudaError_t err);
+void printCudaSyncErr(cudaError_t err);
 
 #endif

@@ -5,8 +5,8 @@
 void checkCudaSyncErr() {
     cudaError_t syncErr = cudaGetLastError();
     cudaError_t asyncErr = cudaDeviceSynchronize();
-    if (syncErr != cudaSuccess) CUDAERROR(syncErr);
-    if (asyncErr != cudaSuccess) CUDAERROR(asyncErr);
+    if (syncErr != cudaSuccess) printCudaSyncErr(syncErr);
+    if (asyncErr != cudaSuccess) printCudaAsyncErr(asyncErr);
 }
 
 void printErr(int flag) {
@@ -22,5 +22,15 @@ void printErr(int flag) {
 
 void printCudaErr(cudaError_t err) {
     fprintf(stderr, "Error: %s\n", cudaGetErrorString(err));
+    exit(1);
+}
+
+void printCudaAsyncErr(cudaError_t err) {
+    fprintf(stderr, "Error (Async): %s\n", cudaGetErrorString(err));
+    exit(1);
+}
+
+void printCudaSyncErr(cudaError_t err) {
+    fprintf(stderr, "Error (Sync): %s\n", cudaGetErrorString(err));
     exit(1);
 }
