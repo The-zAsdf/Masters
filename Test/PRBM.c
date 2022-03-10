@@ -44,15 +44,16 @@ void init() {
     resetMat(prev);
 }
 
+
 float funcJ(int i, int j, float **mat) {
     float m, hi, hj, Jij;
-    hi = mat[i][i];
-    hj = mat[j][j];
+    hi = mat[i][0];
+    hj = mat[j][0];
     Jij = mat[i][j];
 
     m = 0.0;
     for (int k = 0; k < N; k++) {
-        m -= mat[i][k]*mat[k][j]*(2.0*mat[k][k]-hi-hj);
+        m -= mat[i][k]*mat[k][j]*(2.0*mat[k][0]-hi-hj);
     }
     m -= Jij*powf(hi-hj,2.0);
 
@@ -141,7 +142,6 @@ void updateMat() {
 }
 
 double runPRBM(float w, float j, float hh, int n, int ss) {
-    int s = 0;
     W = w;
     J = j;
     h = hh;
@@ -151,10 +151,7 @@ double runPRBM(float w, float j, float hh, int n, int ss) {
     init();
     printf("Starting...");
     startTime();
-    while (s < steps) {
-        updateMat();
-        s++;
-    }
+    for (int s = 0; s < steps; s++) { updateMat(); }
     endTime();
     printf("Done\n");
     return runTime();
