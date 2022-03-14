@@ -1,6 +1,7 @@
 #include <math.h>
 float my_logf (float);
 
+#define PI 3.14159265358979323846
 // Credit given to: https://stackoverflow.com/questions/27229371/inverse-error-function-in-c
 
 /* compute inverse error functions with maximum error of 2.35793 ulp */
@@ -64,9 +65,22 @@ float my_logf (float a)
     r = fmaf (r, s, m);
     r = fmaf (i,  0.693147182f, r); //  0x1.62e430p-1 // log(2)
     if (!((a > 0.0f) && (a <= 3.40282346e+38f))) { // 0x1.fffffep+127
-        r = a + a;  // silence NaNs if necessary
-        // if (a  < 0.0f) r = ( 0.0f / 0.0f); //  NaN
-        // if (a == 0.0f) r = (-1.0f / 0.0f); // -Inf
+        // r = a + a;  // silence NaNs if necessary
+        // if (a  < 0.0f) r = 3.40282346e+38f; //  NaN
+        // if (a == 0.0f) r = 3.40282346e+38f; // -Inf
     }
     return r;
+}
+
+float myErfInv2(float x){
+   float tt1, tt2, lnx, sgn;
+   sgn = (x < 0) ? -1.0f : 1.0f;
+
+   x = (1 - x)*(1 + x);        // x = 1 - x*x;
+   lnx = logf(x);
+
+   tt1 = 2/(PI*0.147) + 0.5f * lnx;
+   tt2 = 1/(0.147) * lnx;
+
+   return(sgn*sqrtf(-tt1 + sqrtf(tt1*tt1 - tt2)));
 }

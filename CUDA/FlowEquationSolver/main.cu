@@ -3,21 +3,28 @@
 #include "IO.h"
 #include "PRBM.h"
 
-int main() {
+int main(int argc, char *argv[]) {
     Var *g = (Var *) malloc(sizeof(struct Variables));
     double *t;
 
-    readInput("input.txt", g);
-    t = (double *) malloc(sizeof(double)*g->R);
-    printVar(g);
+    if (argc == 1) {
+        readInput("input.txt", g);
+        t = (double *) malloc(sizeof(double)*g->R);
+        printVar(g);
 
-    while (g->index < g->R) {
-        t[g->index] = runPRBM(g);
-        g->index++;
+        while (g->index < g->R) {
+            t[g->index] = runPRBM(g);
+            g->index++;
+        }
+        outputData("time",g->N,t, g->R);
+    } else {
+        readArgs(argc, argv, g);
+        t = (double *) malloc(sizeof(double));
+        t[0] = runPRBM(g);
+        outputData("time",t[0]);
     }
-    outputData("time",g->N,t, g->R);
 
     free(g);
     free(t);
-    return 0;
+    return 1;
 }

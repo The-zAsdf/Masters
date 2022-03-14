@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "IO.h"
 
 void readInput(const char *fileName, Var *v) {
@@ -48,6 +49,21 @@ void readInput(const char *fileName, Var *v) {
     }
 }
 
+void readArgs(int argc, char *argv[], Var *v) {
+    if (argc != 6) {
+        fprintf(stderr, "Error: Incorrect number of arguments\n");
+        fprintf(stderr, "Usage: main <W> <J> <h> <S> <N>\n");
+        exit(1);
+    }
+    v->W = atof(argv[1]);
+    v->J = atof(argv[2]);
+    v->h = atof(argv[3]);
+    v->R = 1;
+    v->steps = atoi(argv[4]);
+    v->N[0] = atoi(argv[5]);
+    v->index = 0;
+}
+
 void outputData (const char *fileName, int *x, double *y, int len) {
     FILE *fp;
     char str[255];
@@ -58,15 +74,110 @@ void outputData (const char *fileName, int *x, double *y, int len) {
     strcat(str, fileName);
     strcat(str, ext);
 
-    printf("%s\n", str);
-
     if ((fp = fopen(str,"w+")) == NULL) {
         fprintf(stderr, "Error: File cannot be created\n");
-        exit(1);
+        exit(-1);
     }
 
     for (int i = 0; i < len; i++) {
         fprintf(fp,"%d,%f\n", x[i], y[i]);
+    }
+    fclose(fp);
+}
+
+void outputData (const char *fileName, double y) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"%f\n", y);
+    fclose(fp);
+}
+
+void outputHistoryMatrices(const char *fileName, float ***hist, int len, int n) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    for (int i = 0; i < len; i++) {
+        for (int j = 0; j < n; j++) {
+            for (int k = 0; k < n; k++) {
+                fprintf(fp,"%f",hist[i][min(j,k)][abs(j-k)]);
+                if (k != n-1) fprintf(fp,",");
+            }
+            fprintf(fp,"\n");
+        }
+    }
+    fclose(fp);
+}
+
+void outputDiag(const char *fileName, float ***hist, int len, int n) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < len; j++) {
+            fprintf(fp,"%f",hist[j][i][0]);
+            if (j < len -1) fprintf(fp,",");
+        }
+        fprintf(fp,"\n");
+    }
+    fclose(fp);
+}
+
+void outputElements(const char *fileName, float ***hist, int len, int n) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n-i; j++) {
+            fprintf(fp,"{%d,%d},",i,j);
+            for (int k = 0; k < len; k++) {
+                fprintf(fp,"%f",hist[k][i][j]);
+                if (k != n-1) fprintf(fp,",");
+            }
+            fprintf(fp,"\n");
+        }
     }
     fclose(fp);
 }

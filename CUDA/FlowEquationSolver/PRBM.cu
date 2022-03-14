@@ -16,6 +16,8 @@ __managed__ float **master;
 __managed__ float **temp;
 __managed__ float ***history;
 __managed__ float ***kMat;
+__managed__ float **invGaus;
+__managed__ float *uniform;
 __managed__ ind **threadIndex;
 
 __managed__ float W;
@@ -92,6 +94,34 @@ __global__ void SUMKMAT(float ***k, float **dst) {
     }
 }
 
+__global__ void generateMaster(curandState_t* states, float **invGaus) {
+    int i;
+    int j;
+    int r;
+    float test;
+    int c;
+    int id = threadIdx.x + blockIdx.x*blockDim.x;
+    if (id < numElem) {
+        i = threadIndex[id]->x;
+        j = threadIndex[id]->y;
+        if (j >= N-i || id >= numElem || i >= N) {
+            printf("id = %d (%d,%d) (%d)\n",id, i, j, N-i);
+        }
+        if (j == 0) {
+            master[i][0] = (float)curand(&states[id])/(float)(UINT_MAX/W);
+        } else {
+            c = 0;
+            do {
+                r = curand(&states[id])%numElem;
+                test = fabsf(invGaus[abs(i-j)][r]);
+                c++;
+                if (c >5) printf("I'm stuck");
+            } while (test != INFINITY);
+            master[i][j] = test;
+        }
+    }
+}
+
 void setVariables(struct Variables *v) {
     W = v->W;
     J = v->J;
@@ -143,10 +173,11 @@ __global__ void initStates(unsigned int seed, curandState_t* states) {
 }
 
 void init() {
-    time_t t;
-    cudaError_t err;
-    int count;
     curandState_t* states;
+    cudaError_t err;
+    time_t t;
+    int count;
+    int r;
 
     srand((unsigned) time(&t));
     err = cudaMallocManaged(&master, sizeof(float*)*N);
@@ -188,20 +219,39 @@ void init() {
     }
 
     // init distribution
-    generateSUD(1.0f, J, W, numElem);
-    generateICDF();
+    err = cudaMallocManaged(&uniform, sizeof(float)*numElem);
+    if (err != cudaSuccess) CUDAERROR(err);
 
-    // Setup cuRAND states
+    err = cudaMallocManaged(&invGaus, sizeof(float*)*numElem);
+    if (err != cudaSuccess) CUDAERROR(err);
+    for (int i = 0; i < numElem; i++) {
+        err = cudaMallocManaged(&invGaus[i], sizeof(float)*numElem);
+        if (err != cudaSuccess) CUDAERROR(err);
+
+        uniform[i] = (float) i/(float) (numElem-1);
+    }
+
+    // Setup cuRAND states + distribution
     cudaMallocManaged((void**) &states, numElem * sizeof(curandState_t));
     initStates<<<nob, tpb>>>((unsigned) time(&t), states);
+    checkCudaSyncErr();
+    for (int i = 0; i < numElem; i++) {
+        for (int j = 0; j < numElem; j++) {
+            r = rand()%numElem;
+            invGaus[i][j] = gaussianICDF(uniform[r], (float) i, J, 1.0f);
+        }
+    }
 
     // initialize master values
-    generateMaster<<<nob,tpb>>>(states, master);
+    generateMaster<<<nob,tpb>>>(states, invGaus);
     checkCudaSyncErr();
 
+
     // free distribution + cuRAND states
-    freeDistributions();
     cudaFree(states);
+    for (int i = 0; i < numElem; i++) cudaFree(invGaus[i]);
+    cudaFree(invGaus);
+    cudaFree(uniform);
 
     // history
     for (int i = 0; i < SAVES; i++) {
@@ -315,14 +365,26 @@ void updateMat() {
 }
 
 double runPRBM(struct Variables *v) {
+    int count = 0;
     printf("Setting variables:\n");
     setVariables(v);
     printf("Done\nInitializing:... ");
     init();
     printf("Done\nStarting simulation:\n");
     startTime();
-    for (int s = 0; s < steps; s++) { updateMat(); }
+    for (int s = 0; s < steps; s++) {
+        if (s<100) COPY<<<nob,tpb>>>(master, history[s]);
+        checkCudaSyncErr();
+        updateMat();
+        count++;
+    }
+    if (steps<100) {
+        COPY<<<nob,tpb>>>(master, history[steps-1]);
+        checkCudaSyncErr();
+        count++;
+    }
     endTime();
+    outputHistoryMatrices("matrices.txt",history, count, N);
     printf("Done\n");
     freeMem();
     return runTime();

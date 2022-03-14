@@ -3,4 +3,4 @@ all: clean
 
 clean:
 	del "main"
-	del "data\*.txt"
+	del "data\time.txt"
