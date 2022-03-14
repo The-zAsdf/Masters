@@ -6,6 +6,7 @@
 #include "IO.h"
 #include "err.h"
 #include "PRBM.h"
+#include "distribution.h"
 
 #define SAVES 100
 
@@ -101,9 +102,9 @@ __global__ void generateMaster() {
         }
         // Placeholder, please change ASAP.
         if (j == 0) {
-            master[i][0] = (float)10.0/(float)(RAND_MAX/W);
+            master[i][0] = (float)rand()/(float)(RAND_MAX/W);
         } else {
-            master[i][j] = (float)10.0/(float)(RAND_MAX/J);
+            master[i][j] = getSampleNumber(i,j);
         }
     }
 }
@@ -122,9 +123,6 @@ void setVariables(struct Variables *v) {
         }
     }
     determineThreadsAndBlocks();
-    printf("\tnumElem: %d\n", numElem);
-    printf("\tnob: %zu\n", nob);
-    printf("\ttpb: %zu\n", tpb);
 }
 
 size_t calculateBlocks(size_t threads) {
@@ -198,8 +196,16 @@ void init() {
         if (err != cudaSuccess) CUDAERROR(err);
     }
 
+    // init distribution
+    generateSUD(N, J, 1.0);
+    generateICDF();
+
+    // initialize master values
     generateMaster<<<nob,tpb>>>();
     checkCudaSyncErr();
+
+    // free distribution
+    freeDistributions();
 
     // history
     for (int i = 0; i < SAVES; i++) {
