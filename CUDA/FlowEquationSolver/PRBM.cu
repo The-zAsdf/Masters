@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <time.h>
 #include <math.h>
+#include <curand.h>
+#include <curand_kernel.h>
 #include "measureTime.h"
 #include "IO.h"
 #include "err.h"
@@ -90,25 +92,6 @@ __global__ void SUMKMAT(float ***k, float **dst) {
     }
 }
 
-__global__ void generateMaster() {
-    int i;
-    int j;
-    int id = threadIdx.x + blockIdx.x*blockDim.x;
-    if (id < numElem) {
-        i = threadIndex[id]->x;
-        j = threadIndex[id]->y;
-        if (j >= N-i || id >= numElem || i >= N) {
-            printf("id = %d (%d,%d) (%d)\n",id, i, j, N-i);
-        }
-        // Placeholder, please change ASAP.
-        if (j == 0) {
-            master[i][0] = (float)rand()/(float)(RAND_MAX/W);
-        } else {
-            master[i][j] = getSampleNumber(i,j);
-        }
-    }
-}
-
 void setVariables(struct Variables *v) {
     W = v->W;
     J = v->J;
@@ -152,10 +135,18 @@ void determineThreadsAndBlocks() {
     tpb = threads;
 }
 
+__global__ void initStates(unsigned int seed, curandState_t* states) {
+    int id = threadIdx.x + blockIdx.x*blockDim.x;
+    if (id < numElem) {
+        curand_init(seed, id, 0, &states[id]);
+    }
+}
+
 void init() {
     time_t t;
     cudaError_t err;
     int count;
+    curandState_t* states;
 
     srand((unsigned) time(&t));
     err = cudaMallocManaged(&master, sizeof(float*)*N);
@@ -197,15 +188,20 @@ void init() {
     }
 
     // init distribution
-    generateSUD(N, J, 1.0);
+    generateSUD(1.0f, J, W, numElem);
     generateICDF();
 
+    // Setup cuRAND states
+    cudaMallocManaged((void**) &states, numElem * sizeof(curandState_t));
+    initStates<<<nob, tpb>>>((unsigned) time(&t), states);
+
     // initialize master values
-    generateMaster<<<nob,tpb>>>();
+    generateMaster<<<nob,tpb>>>(states, master);
     checkCudaSyncErr();
 
-    // free distribution
+    // free distribution + cuRAND states
     freeDistributions();
+    cudaFree(states);
 
     // history
     for (int i = 0; i < SAVES; i++) {

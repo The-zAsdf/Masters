@@ -2,9 +2,9 @@
 #define DISTRIBUTION_H
 
 float gaussianICDF(float p, float d);
-void gererateSUD(int size, float j, float a);
+void generateSUD(float a, float j, float w, int num);
 void generateICDF();
-float getSampleNumber(int i, int j);
 void freeDistributions();
+__global__ void generateMaster(curandState_t* states, float** master);
 
 #endif
