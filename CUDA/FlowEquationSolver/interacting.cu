@@ -6,17 +6,12 @@
 #include <curand_kernel.h>
 #include "measureTime.h"
 #include "IO.h"
-#include "err.cuh"
+#include "err.h"
 #include "PRBM.h"
 #include "distribution.h"
 #include "matOperations.cuh"
 
-#define ATTEMPTS 12
-#define MIN_SCALE_FACTOR 0.125
-#define MAX_SCALE_FACTOR 4.0
-
 __managed__ float **master;
-__managed__ float **prev;
 __managed__ float **temp;
 __managed__ float ***kMat;
 __managed__ float **invGaus;
@@ -30,7 +25,7 @@ __managed__ int numElem;    // Number of elements
 __managed__ float h;
 __managed__ size_t tpb;     // Threads per block
 __managed__ size_t nob;     // Number of blocks
-double l;                  // Total simulation steps
+int steps;                  // Total simulation steps
 
 
 
@@ -56,7 +51,7 @@ void setVariables(struct Variables *v) {
     J = v->J;
     N = v->N[v->index];
     h = v->h;
-    l = v->steps;
+    steps = v->steps;
 
     numElem = 0;
     for (int i = 0; i < N; i++) {
@@ -119,13 +114,13 @@ void init() {
     err = cudaMallocManaged(&master, sizeof(float*)*N);
     if (err != cudaSuccess) CUDAERROR(err);
 
-    err = cudaMallocManaged(&prev, sizeof(float*)*N);
-    if (err != cudaSuccess) CUDAERROR(err);
-
     err = cudaMallocManaged(&temp, sizeof(float*)*N);
     if (err != cudaSuccess) CUDAERROR(err);
 
-    err = cudaMallocManaged(&kMat, sizeof(float*)*7);
+    err = cudaMallocManaged(&history, sizeof(float*)*SAVES);
+    if (err != cudaSuccess) CUDAERROR(err);
+
+    err = cudaMallocManaged(&kMat, sizeof(float*)*4);
     if (err != cudaSuccess) CUDAERROR(err);
 
     err = cudaMallocManaged(&threadIndex, sizeof(struct index *)*numElem);
@@ -148,9 +143,6 @@ void init() {
     // master and temp
     for (int i = 0; i < N; i++){
         err = cudaMallocManaged(&master[i], sizeof(float)*(N-i));
-        if (err != cudaSuccess) CUDAERROR(err);
-
-        err = cudaMallocManaged(&prev[i], sizeof(float)*(N-i));
         if (err != cudaSuccess) CUDAERROR(err);
 
         err = cudaMallocManaged(&temp[i], sizeof(float)*(N-i));
@@ -191,8 +183,18 @@ void init() {
     cudaFree(invGaus);
     cudaFree(uniform);
 
+    // history
+    for (int i = 0; i < SAVES; i++) {
+        err = cudaMallocManaged(&history[i], sizeof(float*)*N);
+        if (err != cudaSuccess) CUDAERROR(err);
+        for (int j = 0; j < N; j++) {
+            err = cudaMallocManaged(&history[i][j], sizeof(float)*(N-j));
+            if (err != cudaSuccess) CUDAERROR(err);
+        }
+    }
+
     // kMat
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 4; i++) {
         err = cudaMallocManaged(&kMat[i], sizeof(float*)*N);
         if (err != cudaSuccess) CUDAERROR(err);
         for (int j = 0; j < N; j++) {
@@ -206,13 +208,19 @@ void freeMem() {
     for (int i = 0; i < N; i++) {
         cudaFree(master[i]);
         cudaFree(temp[i]);
-        cudaFree(prev[i]);
     }
     cudaFree(master);
     cudaFree(temp);
-    cudaFree(prev);
 
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < SAVES; i++) {
+        for (int j = 0; j < N; j++) {
+            cudaFree(history[i][j]);
+        }
+        cudaFree(history[i]);
+    }
+    cudaFree(history);
+
+    for (int i = 0; i < 4; i++) {
         for (int j = 0; j < N; j++) {
             cudaFree(kMat[i][j]);
         }
@@ -224,33 +232,34 @@ void freeMem() {
 // Keep these functions in the same file as CALCSLOPE, or find a way to
 // (efficiently) pass device code through kernal (i.e no memcopies)
 __device__ void funcH(float **mat, float *q, int i, int j) {
-    float hi = mat[i][0];
-    *q = 0.0f;
-    for (int k = 0; k < N; k++) {
-        if (i != k) {
-            *q += powf(mat[min(i,k)][abs(i-k)], 2.0f)*(hi-mat[k][0]);
-        }
-    }
-    *q *= 2.0f;
+    // float hi = mat[i][0];
+    // *q = 0.0f;
+    // for (int k = 0; k < N; k++) {
+    //     if (i != k) {
+    //         *q += powf(mat[min(i,k)][abs(i-k)], 2.0f)*(hi-mat[k][0]);
+    //     }
+    // }
+    // *q *= 2.0f;
 }
 
 __device__ void funcJ(float **mat, float *q, int i, int j) {
-    float hi, hj;
-    int x = i;
-    int y = j+i;
-    *q = 0.0f;
-    hi = mat[x][0];
-    hj = mat[y][0];
-    for (int k = 0; k < N; k++) {
-        if (x != k && y != k) {
-            *q -= mat[min(x,k)][abs(x-k)]*mat[min(y,k)][abs(y-k)]*(2.0f*mat[k][0]-hi-hj);
-        }
-    }
-    if (x != y) *q -= mat[i][j]*powf(hi-hj,2.0f);
+    // float hi, hj;
+    // int x = i;
+    // int y = j+i;
+    // *q = 0.0f;
+    // hi = mat[x][0];
+    // hj = mat[y][0];
+    // for (int k = 0; k < N; k++) {
+    //     if (x != k && y != k) {
+    //         *q -= mat[min(x,k)][abs(x-k)]*mat[min(y,k)][abs(y-k)]*(2.0f*mat[k][0]-hi-hj);
+    //     }
+    // }
+    // if (x != y) *q -= mat[i][j]*powf(hi-hj,2.0f);
 }
 
 __global__ void CALCSLOPE(float **kM, float **mat) {
-    int i, j;
+    float hi, hj;
+    int i, j, x, y;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (id < numElem) {
@@ -267,68 +276,16 @@ __global__ void CALCSLOPE(float **kM, float **mat) {
     }
 }
 
-void RK4() {
-    double s = 0.0;
-    while (s < l) {
-        // Copy master into temp
-        COPY<<<nob,tpb>>>(master,temp);
-        checkCudaSyncErr();
-
-        // Calculate k[0]
-        CALCSLOPE<<<nob,tpb>>>(kMat[0], temp);
-        checkCudaSyncErr();
-
-        APPLYSLOPE<<<nob,tpb>>>(kMat[0], temp, 0.5f);
-        checkCudaSyncErr();
-
-        CALCSLOPE<<<nob,tpb>>>(kMat[1], temp);
-        checkCudaSyncErr();
-
-        COPY<<<nob,tpb>>>(master,temp);
-        checkCudaSyncErr();
-
-        APPLYSLOPE<<<nob,tpb>>>(kMat[1], temp, 0.5f);
-        checkCudaSyncErr();
-
-        CALCSLOPE<<<nob,tpb>>>(kMat[2], temp);
-        checkCudaSyncErr();
-
-        COPY<<<nob,tpb>>>(master,temp);
-        checkCudaSyncErr();
-
-        APPLYSLOPE<<<nob,tpb>>>(kMat[2], temp, 1.0f);
-        checkCudaSyncErr();
-
-        CALCSLOPE<<<nob,tpb>>>(kMat[3], temp);
-        checkCudaSyncErr();
-
-        COPY<<<nob,tpb>>>(master,temp);
-        checkCudaSyncErr();
-
-        SUMRK<<<nob,tpb>>>(kMat, master);
-        checkCudaSyncErr();
-        // printf("Final master:\n");
-        printf("s = %.4f\n", s);
-        printMatrix(master, N);
-        printf("\n");
-        s += (double) h;
-    }
-}
-
-void DP () {
+void DP() {
     // Copy master into temp
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,prev);
-    checkCudaSyncErr();
-
     // Calculate k[0]
-
     CALCSLOPE<<<nob,tpb>>>(kMat[0], temp);
     checkCudaSyncErr();
 
-    DPSLOPE1<<<nob, tpb>>>(kMat, temp);
+    APPLYSLOPE<<<nob,tpb>>>(kMat[0], temp, 0.5f);
     checkCudaSyncErr();
 
     CALCSLOPE<<<nob,tpb>>>(kMat[1], temp);
@@ -337,7 +294,7 @@ void DP () {
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
 
-    DPSLOPE2<<<nob, tpb>>>(kMat, temp);
+    APPLYSLOPE<<<nob,tpb>>>(kMat[1], temp, 0.5f);
     checkCudaSyncErr();
 
     CALCSLOPE<<<nob,tpb>>>(kMat[2], temp);
@@ -346,84 +303,20 @@ void DP () {
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
 
-    DPSLOPE3<<<nob, tpb>>>(kMat, temp);
+    APPLYSLOPE<<<nob,tpb>>>(kMat[2], temp, 1.0f);
     checkCudaSyncErr();
 
     CALCSLOPE<<<nob,tpb>>>(kMat[3], temp);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,temp);
-    checkCudaSyncErr();
-
-    DPSLOPE4<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[4], temp);
-    checkCudaSyncErr();
-
-    COPY<<<nob,tpb>>>(master,temp);
-    checkCudaSyncErr();
-
-    DPSLOPE5<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[5], temp);
-    checkCudaSyncErr();
-
-    COPY<<<nob,tpb>>>(master,temp);
-    checkCudaSyncErr();
-
-    DPSLOPE6<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[6], temp);
+    COPY<<<nob,tpb>>>(temp,master);
     checkCudaSyncErr();
 
     SUMDP<<<nob,tpb>>>(kMat, master);
     checkCudaSyncErr();
-
-    DPERROR<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-}
-
-void embeddedDP () {
-    double s = 0.0;
-    double scale;
-    float err;
-    float hnext;
-    double qq;
-    double tol = 0.001/l;
-    int last_interval = 0;
-    int i, x, y;
-    while (s < l) {
-        scale = 1.0;
-        for (i = 0; i < ATTEMPTS; i++) {
-            DP();
-            err = findMax(temp, &x, &y);
-            if (roundf(err) == 0) { scale = MAX_SCALE_FACTOR; break; }
-            qq = (roundf(prev[x][y]) == 0) ? tol : fabsf(prev[x][y]);
-            scale = 0.8 * sqrt( sqrt ( tol * qq /  (double) err ) );
-            scale = min( max(scale,MIN_SCALE_FACTOR), MAX_SCALE_FACTOR);
-            if ((double) err < (tol * qq)) break;
-            h *= (float) scale;
-            if (s + (double) h > l) h = (float)l - (float)s;
-            else if (s + (double)h + 0.5*(double)h > l) h = 0.5f * h;
-            if (i >= 1) { printf("Something is happening idk why\n"); }
-            COPY<<<nob, tpb>>>(prev, master);
-            checkCudaSyncErr();
-        }
-        if ( i >= ATTEMPTS ) { hnext = h * scale; printf("That thing happened that you don't know why it's happening\n"); exit(-1); };
-        printf("s = %.4f, h = %.4f\n", s, h);
-        s += h;
-        h *= scale;
-        hnext = h;
-        if ( last_interval ) break;
-        if (s + (double) h > 1.0) { last_interval = 1; h = (float) l - (float) s; }
-        else if (s + h + 0.5*h > l) h = 0.5 * h;
-        // printf("Final master:\n");
-        printMatrix(master, N);
-        printf("\n");
-    }
+    // printf("Final master:\n");
+    printMatrix(master, N);
+    printf("\n");
 }
 
 double runPRBM(struct Variables *v) {
@@ -433,7 +326,9 @@ double runPRBM(struct Variables *v) {
     init();
     printf("Done\nStarting simulation:\n");
     startTime();
-    embeddedDP();
+    for (int s = 0; s < steps; s++) {
+        updateMat();
+    }
 
     endTime();
     printf("Done\n");

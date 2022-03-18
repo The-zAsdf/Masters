@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include "erfinv.h"
-#include "err.h"
+#include "err.cuh"
 
 // Gaussian inverse CDF
 float gaussianICDF(float p, float d, float j, float alpha) {

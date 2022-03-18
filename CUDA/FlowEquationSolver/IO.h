@@ -8,7 +8,7 @@ typedef struct Variables{
     int R; // repitition
     int N[10];
     int index;
-    int steps;
+    double steps;
 } Var;
 
 void readInput(const char *fileName, Var *v);
@@ -19,5 +19,6 @@ void outputData (const char *fileName, double y);
 void outputHistoryMatrices(const char *fileName, float ***hist, int len, int n);
 void outputDiag(const char *filename, float ***hist, int len, int n);
 void outputElements(const char *filename, float ***hist, int len, int n);
+void printMatrix(float **mat, int n);
 
 #endif

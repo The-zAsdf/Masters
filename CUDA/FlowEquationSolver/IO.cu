@@ -33,7 +33,7 @@ void readInput(const char *fileName, Var *v) {
                     break;
                 case 'S':
                     token = strtok(NULL, " ");
-                    v->steps = atoi(token);
+                    v->steps = atof(token);
                     break;
                 case 'N':
                     for (int i = 0; i < v->R; i++) {
@@ -59,7 +59,7 @@ void readArgs(int argc, char *argv[], Var *v) {
     v->J = atof(argv[2]);
     v->h = atof(argv[3]);
     v->R = 1;
-    v->steps = atoi(argv[4]);
+    v->steps = atof(argv[4]);
     v->N[0] = atoi(argv[5]);
     v->index = 0;
 }
@@ -190,5 +190,15 @@ void printVar(Var *var) {
     printf("N:");
     for (int i = 0; i < var->R; i++) { printf(" %d", var->N[i]); }
     printf("\n");
-    printf("steps: %d\n", var->steps);
+    printf("steps: %.2f\n", var->steps);
+}
+
+void printMatrix(float **mat, int n) {
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            printf("%.3f",mat[min(i,j)][abs(i-j)]);
+            if (j != n-1) printf(", ");
+        }
+        printf("\n");
+    }
 }

@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include "err.h"
+#include "err.cuh"
 
 void checkCudaSyncErr() {
     cudaError_t syncErr = cudaGetLastError();
