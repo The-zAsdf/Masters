@@ -3,12 +3,12 @@
 
 #include "PRBM.h"
 
-__device__ static const float r_9 = 1.0 / 9.0;
-__device__ static const float r_2_9 = 2.0 / 9.0;
-__device__ static const float r_12 = 1.0 / 12.0;
-__device__ static const float r_324 = 1.0 / 324.0;
-__device__ static const float r_330 = 1.0 / 330.0;
-__device__ static const float r_28 = 1.0 / 28.0;
+__device__ __constant__ float r_9 = 1.0 / 9.0;
+__device__ __constant__ float r_2_9 = 2.0 / 9.0;
+__device__ __constant__ float r_12 = 1.0 / 12.0;
+__device__ __constant__ float r_324 = 1.0 / 324.0;
+__device__ __constant__ float r_330 = 1.0 / 330.0;
+__device__ __constant__ float r_28 = 1.0 / 28.0;
 
 __global__ void COPY(float **src, float **dest) {
     extern __managed__ int numElem;
@@ -226,19 +226,6 @@ __global__ void DPERROR(float ***k, float **dst) {
     }
 }
 
-float findMax(float **mat, int *x, int *y) {
-    extern __managed__ int N;
-    float c = mat[0][0];
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N-i; j++) {
-            if (c > mat[i][j]) {
-                c = mat[i][j];
-                *x = i;
-                *y = j;
-            }
-        }
-    }
-    return c;
-}
+
 
 #endif

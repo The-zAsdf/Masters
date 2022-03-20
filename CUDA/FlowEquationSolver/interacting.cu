@@ -281,6 +281,9 @@ void DP() {
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
 
+    COPY<<<nob,tpb>>>(master,prev);
+    checkCudaSyncErr();
+
     // Calculate k[0]
     CALCSLOPE<<<nob,tpb>>>(kMat[0], temp);
     checkCudaSyncErr();

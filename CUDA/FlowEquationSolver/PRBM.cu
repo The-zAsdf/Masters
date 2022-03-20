@@ -32,7 +32,19 @@ __managed__ size_t tpb;     // Threads per block
 __managed__ size_t nob;     // Number of blocks
 double l;                  // Total simulation steps
 
-
+float findMax(float **mat, int *x, int *y) {
+    float c = mat[0][0];
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N-i; j++) {
+            if (c < mat[i][j] && (i != 0 || j != 0)) {
+                c = mat[i][j];
+                *x = i;
+                *y = j;
+            }
+        }
+    }
+    return c;
+}
 
 __global__ void generateMaster(curandState_t* states) {
     int i;
@@ -323,8 +335,6 @@ void DP () {
     COPY<<<nob,tpb>>>(master,prev);
     checkCudaSyncErr();
 
-    // Calculate k[0]
-
     CALCSLOPE<<<nob,tpb>>>(kMat[0], temp);
     checkCudaSyncErr();
 
@@ -390,7 +400,6 @@ void embeddedDP () {
     double s = 0.0;
     double scale;
     float err;
-    float hnext;
     double qq;
     double tol = 0.001/l;
     int last_interval = 0;
@@ -400,27 +409,32 @@ void embeddedDP () {
         for (i = 0; i < ATTEMPTS; i++) {
             DP();
             err = findMax(temp, &x, &y);
-            if (roundf(err) == 0) { scale = MAX_SCALE_FACTOR; break; }
-            qq = (roundf(prev[x][y]) == 0) ? tol : fabsf(prev[x][y]);
+            if (roundf(err) == err && roundf(err) == 0) {
+                scale = MAX_SCALE_FACTOR;
+                break;
+            }
+            if (roundf(prev[x][y]) == prev[x][y] && roundf(prev[x][y]) == 0.0f) {
+                qq = tol;
+            } else {
+                qq = fabsf(prev[x][y]);
+            }
             scale = 0.8 * sqrt( sqrt ( tol * qq /  (double) err ) );
             scale = min( max(scale,MIN_SCALE_FACTOR), MAX_SCALE_FACTOR);
             if ((double) err < (tol * qq)) break;
             h *= (float) scale;
             if (s + (double) h > l) h = (float)l - (float)s;
             else if (s + (double)h + 0.5*(double)h > l) h = 0.5f * h;
-            if (i >= 1) { printf("Something is happening idk why\n"); }
-            COPY<<<nob, tpb>>>(prev, master);
+            COPY<<<nob,tpb>>>(prev,master);
             checkCudaSyncErr();
+
         }
-        if ( i >= ATTEMPTS ) { hnext = h * scale; printf("That thing happened that you don't know why it's happening\n"); exit(-1); };
-        printf("s = %.4f, h = %.4f\n", s, h);
+        if ( i >= ATTEMPTS ) { printf("tolerance too small?\n"); exit(-2); }
+        printf("s = %.4f, h = %.4f, scale = %.4f\n", s, h, scale);
         s += h;
         h *= scale;
-        hnext = h;
         if ( last_interval ) break;
-        if (s + (double) h > 1.0) { last_interval = 1; h = (float) l - (float) s; }
+        if (s + (double) h > l) { last_interval = 1; h = (float) l - (float) s; }
         else if (s + h + 0.5*h > l) h = 0.5 * h;
-        // printf("Final master:\n");
         printMatrix(master, N);
         printf("\n");
     }

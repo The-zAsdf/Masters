@@ -20,5 +20,6 @@ void outputHistoryMatrices(const char *fileName, float ***hist, int len, int n);
 void outputDiag(const char *filename, float ***hist, int len, int n);
 void outputElements(const char *filename, float ***hist, int len, int n);
 void printMatrix(float **mat, int n);
+void printErrorMatrix(float **mat, int n);
 
 #endif

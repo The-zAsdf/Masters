@@ -202,3 +202,13 @@ void printMatrix(float **mat, int n) {
         printf("\n");
     }
 }
+
+void printErrorMatrix(float **mat, int n) {
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            printf("%.6f",mat[min(i,j)][abs(i-j)]);
+            if (j != n-1) printf(", ");
+        }
+        printf("\n");
+    }
+}
