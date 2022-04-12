@@ -24,6 +24,20 @@ __global__ void COPY(float **src, float **dest) {
     }
 }
 
+__global__ void COPY(float **src, float **dest) {
+    extern __managed__ int numElem;
+    extern __managed__ ind **threadIndex;
+    int i;
+    int j;
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (id < numElem) {
+        i = threadIndex[id]->x;
+        j = threadIndex[id]->y;
+        dest[i][j] = src[i][j];
+    }
+}
+
 __global__ void RESET(float **mat) {
     extern __managed__ int numElem;
     extern __managed__ ind **threadIndex;
