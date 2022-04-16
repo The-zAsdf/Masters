@@ -15,14 +15,15 @@
 #define MIN_SCALE_FACTOR 0.125
 #define MAX_SCALE_FACTOR 4.0
 
-#define DEBUG
+// #define DEBUG
 
 __managed__ floet *master;
 __managed__ floet *prev;
 __managed__ floet *temp;
 __managed__ floet *gen;
 __managed__ floet **kMat;
-__managed__ float **invGaus;
+__managed__ float **invGausJ;
+__managed__ float **invGausD;
 __managed__ float *uniform;
 __managed__ ind **threadIndex;
 __managed__ ind **threadIndexJJ;
@@ -46,20 +47,27 @@ __global__ void generateMaster(curandState_t* states) {
         j = threadIndex[id]->j;
         k = threadIndex[id]->k;
         l = threadIndex[id]->l;
-        if (k != -1 && ((i == j && k == l) || (i == l && j == k))) { // init :D:_{ij}
+        if (k != -1 && (i == l && j == k)) {
+            r = (int)(curand_uniform(&states[id])*(1000));
+            master->ten[i][j][k][l] = invGausD[abs(i-j)][r];
+        } else if (k != -1 && (i == j && k == l)) { // init :D:_{ij}
             // PLACEHOLDER //
-            r = (int)(curand_uniform(&states[id])*((float) numElem));
-            if (i == j) master->ten[i][j][k][l] = invGaus[abs(i-k)][r];
-            else if (i == l) master->ten[i][j][k][l] = invGaus[abs(i-j)][r];
+            r = (int)(curand_uniform(&states[id])*(1000));
+            // NOT CORRECT. DOUBLE CHECK //
+            master->ten[i][j][k][l] = invGausD[abs(i-k)][r];
+            master->ten[l][k][j][i] = invGausD[abs(i-k)][r];
         } else if (k != -1 && l != -1) { // init :G:_{ijkl}
             // PLACEHOLDER //
-            r = (int)(curand_uniform(&states[id])*1000);
-            master->ten[i][j][k][l] = invGaus[abs(i-j)][r];
+            // r = (int)(curand_uniform(&states[id])*((float) numElem));
+            // master->ten[i][j][k][l] = invGausJ[abs(i-j)][r];
+            master->ten[i][j][k][l] = 0.0f;
         } else if (k == -1 && (i == j)) { // init h_i
             master->mat[i][j] = curand_uniform(&states[id])*W;
         } else if (k == -1 && (i != j)){ // init :J:_{ij}
             // PLACEHOLDER //
-            master->mat[i][j] == 0.0f;
+            r = (int)(curand_uniform(&states[id])*(1000));
+            master->mat[i][j] = invGausJ[abs(i-j)][r];
+            master->mat[j][i] = invGausJ[abs(i-j)][r];
         }
     }
 }
@@ -77,6 +85,11 @@ void setVariables(struct Variables *v) {
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
             numElem ++; // H(2)
+        }
+    }
+
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
             for (int k = 0; k < N; k++) {
                 for (int l = 0; l < N; l++) numElem++; // H(4)
             }
@@ -334,7 +347,7 @@ void init() {
         for (int j = 0; j < N; j++) {
             for (int k = 0; k < N; k++) {
                 for (int l = 0; l < N; l++) {
-                    // each :G: element has a thread
+                    // each rank 4 element has a thread
                     threadIndex[count]->i = i;
                     threadIndex[count]->j = j;
                     threadIndex[count]->k = k;
@@ -353,10 +366,16 @@ void init() {
     err = cudaMallocManaged(&uniform, sizeof(float)*1000);
     if (err != cudaSuccess) CUDAERROR(err);
 
-    err = cudaMallocManaged(&invGaus, sizeof(float*)*N);
+    err = cudaMallocManaged(&invGausJ, sizeof(float*)*N);
+    if (err != cudaSuccess) CUDAERROR(err);
+
+    err = cudaMallocManaged(&invGausD, sizeof(float*)*N);
     if (err != cudaSuccess) CUDAERROR(err);
     for (int i = 0; i < N; i++) {
-        err = cudaMallocManaged(&invGaus[i], sizeof(float)*1000);
+        err = cudaMallocManaged(&invGausJ[i], sizeof(float)*1000);
+        if (err != cudaSuccess) CUDAERROR(err);
+
+        err = cudaMallocManaged(&invGausD[i], sizeof(float)*1000);
         if (err != cudaSuccess) CUDAERROR(err);
 
         uniform[i] = (float) i/(float) (1000-1);
@@ -374,7 +393,9 @@ void init() {
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < 1000; j++) {
             r = rand()%1000;
-            invGaus[i][j] = gaussianICDF(uniform[r], (float) i+1, J, 1.0f);
+            invGausJ[i][j] = gaussianICDF(uniform[r], (float) i+1, J, 1.0f);
+            r = rand()%1000;
+            invGausD[i][j] = gaussianICDF(uniform[r], (float) i+1, J*0.1f, 1.0f);
         }
     }
     #ifdef DEBUG
@@ -394,7 +415,8 @@ void init() {
 
     // free distribution + cuRAND states
     cudaFree(states);
-    cudaFree(invGaus);
+    cudaFree(invGausJ);
+    cudaFree(invGausD);
     cudaFree(uniform);
     #ifdef DEBUG
     printf("Done\n");
@@ -471,14 +493,25 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
         k = threadIndex[id]->k;
         l = threadIndex[id]->l;
 
-        if (k != -1 && ((i == j && k == l) || (i == l && j == k))) { // funcD
-            funcD(mat, &kM->ten[i][j][k][l], i, j, k, l);
-        } else if (k != -1 && l != -1) { // funcG
-            funcG(mat, &kM->ten[i][j][k][l], i, j, k, l);
-        } else if (k == -1 && (i == j)) { // funcH
-            funcH(mat, &kM->mat[i][j], i);
-        } else if (k == -1 && (i != j)) { // funcJ
-            funcJ(mat, &kM->mat[i][j], i, j);
+        if (k == -1 && l == -1) {
+            kM->mat[i][j] = 0.0f;
+            for (int q = 0; q < N; q++) {
+                kM->mat[i][j] += gen->mat[i][q]*mat->mat[q][j]
+                               - mat->mat[i][q]*gen->mat[q][j];
+            }
+        } else {
+            kM->ten[i][j][k][l] = 0.0f;
+            for (int q = 0; q < N; q++) {
+                kM->ten[i][j][k][l] += gen->ten[i][q][k][l]*mat->mat[q][j]
+                                     + gen->ten[i][j][k][q]*mat->mat[q][l]
+                                     - gen->ten[i][j][q][l]*mat->mat[k][q]
+                                     - gen->ten[q][j][k][l]*mat->mat[i][q]
+                                     + mat->ten[q][j][k][l]*gen->mat[i][q]
+                                     + mat->ten[i][j][q][l]*gen->mat[k][q]
+                                     - mat->ten[i][j][k][q]*gen->mat[q][l]
+                                     - mat->ten[i][q][k][l]*gen->mat[q][j];
+
+            }
         }
     }
 }
@@ -738,8 +771,8 @@ void embeddedDP () {
         if ( last_interval ) break;
         if (s + (double) h > l) { last_interval = 1; h = (float) l - (float) s; }
         else if (s + h + 0.5*h > l) h = 0.5 * h;
-        // printMatrix(master, N);
-        // printf("\n");
+        printMatrix(master->mat, N);
+        printf("\n");
     }
 }
 

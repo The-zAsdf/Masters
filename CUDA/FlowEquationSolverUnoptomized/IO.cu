@@ -196,7 +196,7 @@ void printVar(Var *var) {
 void printMatrix(float **mat, int n) {
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
-            printf("%.3f",mat[min(i,j)][abs(i-j)]);
+            printf("%.3f",mat[i][j]);
             if (j != n-1) printf(", ");
         }
         printf("\n");

@@ -77,8 +77,21 @@ __global__ void GENERATOR(struct floet *src, struct floet *eta) {
         k = threadIndex[id]->k;
         l = threadIndex[id]->l;
 
-        if (k == -1 && l == -1) eta->mat[i][j] = src->mat[i][j];
-        else                    eta->ten[i][j][k][l] = src->ten[i][j][k][l];
+        if (k == -1 && l == -1) {
+            eta->mat[i][j] = src->mat[i][j]*(src->mat[i][i] - src->mat[j][j]);
+        } else {
+            eta->ten[i][j][k][l] = src->ten[i][j][k][l]*(src->mat[i][i]
+                                 + src->mat[k][k] - src->mat[j][j]
+                                 - src->mat[l][l]);
+            if (j == l) {
+                eta->ten[i][j][k][l] += 2*(src->ten[i][i][j][j]
+                                      - src->ten[i][j][j][i])*src->mat[k][j];
+            }
+            if (k == l) {
+                eta->ten[i][j][k][l] -= 2*(src->ten[i][i][j][j]
+                                      - src->ten[i][j][j][i])*src->mat[k][k];
+            }
+        }
     }
 }
 
