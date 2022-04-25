@@ -83,13 +83,15 @@ __global__ void GENERATOR(struct floet *src, struct floet *eta) {
             eta->ten[i][j][k][l] = src->ten[i][j][k][l]*(src->mat[i][i]
                                  + src->mat[k][k] - src->mat[j][j]
                                  - src->mat[l][l]);
-            if (j == l) {
-                eta->ten[i][j][k][l] += 2*(src->ten[i][i][j][j]
-                                      - src->ten[i][j][j][i])*src->mat[k][j];
-            }
-            if (k == l) {
-                eta->ten[i][j][k][l] -= 2*(src->ten[i][i][j][j]
-                                      - src->ten[i][j][j][i])*src->mat[k][k];
+            if (i == j && k != l) {
+                eta->ten[i][i][k][l] += src->mat[k][l]*(src->ten[i][i][k][k]
+                                      + src->ten[k][k][i][i]
+                                      + src->ten[l][i][i][l]
+                                      + src->ten[i][l][l][i]
+                                      - src->ten[k][i][i][k]
+                                      - src->ten[i][k][k][i]
+                                      - src->ten[l][l][i][i]
+                                      - src->ten[i][i][l][l]);
             }
         }
     }

@@ -11,6 +11,7 @@
 #include "distribution.h"
 #include "matOperations.cuh"
 
+#define NUMRECORDS 200
 #define ATTEMPTS 12
 #define MIN_SCALE_FACTOR 0.125
 #define MAX_SCALE_FACTOR 4.0
@@ -26,7 +27,6 @@ __managed__ float **invGausJ;
 __managed__ float **invGausD;
 __managed__ float *uniform;
 __managed__ ind **threadIndex;
-__managed__ ind **threadIndexJJ;
 
 __managed__ float W;
 __managed__ float J;
@@ -35,9 +35,12 @@ __managed__ int numElem;    // Number of elements
 __managed__ float h;
 __managed__ size_t tpb;     // Threads per block
 __managed__ size_t nob;     // Number of blocks
-double l;                  // Total simulation steps
+double l;                   // Total simulation steps
 
-
+floardH **hRecord;
+floardD **dRecord;
+floardF **iRecord;
+int r;
 
 __global__ void generateMaster(curandState_t* states) {
     int i, j, k, l, r;
@@ -47,34 +50,36 @@ __global__ void generateMaster(curandState_t* states) {
         j = threadIndex[id]->j;
         k = threadIndex[id]->k;
         l = threadIndex[id]->l;
-        if (k != -1 && (i == l && j == k)) {
-            r = (int)(curand_uniform(&states[id])*(1000));
-            master->ten[i][j][k][l] = invGausD[abs(i-j)][r];
-        } else if (k != -1 && (i == j && k == l)) { // init :D:_{ij}
+        if (k != -1 && (i == j && k == l) && i > k) { // init :D:_{ij}
             // PLACEHOLDER //
-            r = (int)(curand_uniform(&states[id])*(1000));
+            r = (int)(curand_uniform(&states[id])*1001 - 1);
             // NOT CORRECT. DOUBLE CHECK //
-            master->ten[i][j][k][l] = invGausD[abs(i-k)][r];
-            master->ten[l][k][j][i] = invGausD[abs(i-k)][r];
-        } else if (k != -1 && l != -1) { // init :G:_{ijkl}
+            master->ten[i][i][k][k] = invGausD[abs(i-k)][r]/2;
+            master->ten[k][k][i][i] = invGausD[abs(i-k)][r]/2;
+            master->ten[i][k][k][i] = -invGausD[abs(i-k)][r]/2;
+            master->ten[k][i][i][k] = -invGausD[abs(i-k)][r]/2;
+        } else if (k != -1 && l != -1 && (i != l && j != k)) { // init :G:_{ijkl}
             // PLACEHOLDER //
-            // r = (int)(curand_uniform(&states[id])*((float) numElem));
+            // r = (int)(curand_uniform(&states[id])*((float) 1000));
             // master->ten[i][j][k][l] = invGausJ[abs(i-j)][r];
             master->ten[i][j][k][l] = 0.0f;
         } else if (k == -1 && (i == j)) { // init h_i
-            master->mat[i][j] = curand_uniform(&states[id])*W;
-        } else if (k == -1 && (i != j)){ // init :J:_{ij}
+            r = (int)(curand_uniform(&states[id])*1001 - 1);
+            master->mat[i][j] = (uniform[r]-0.5f)*2.0f*W;
+        } else if (k == -1 && (i > j)){ // init :J:_{ij}
             // PLACEHOLDER //
-            r = (int)(curand_uniform(&states[id])*(1000));
+            r = (int)(curand_uniform(&states[id])*1001 - 1);
             master->mat[i][j] = invGausJ[abs(i-j)][r];
             master->mat[j][i] = invGausJ[abs(i-j)][r];
         }
     }
+
+
 }
 
 void setVariables(struct Variables *v) {
-    cudaDeviceProp props;
-    int deviceId;
+    // cudaDeviceProp props;
+    // int deviceId;
     W = v->W;
     J = v->J;
     N = v->N[v->index];
@@ -377,9 +382,8 @@ void init() {
 
         err = cudaMallocManaged(&invGausD[i], sizeof(float)*1000);
         if (err != cudaSuccess) CUDAERROR(err);
-
-        uniform[i] = (float) i/(float) (1000-1);
     }
+    for (int i = 0; i < 1000; i++) uniform[i] = ((float) i)/((float) (1000-1));
     #ifdef DEBUG
     printf("Done\n");
 
@@ -420,8 +424,28 @@ void init() {
     cudaFree(uniform);
     #ifdef DEBUG
     printf("Done\n");
+
+    printf("\tAllocating record objects:");
     #endif
 
+    hRecord = (struct floardH**)malloc(sizeof(struct floardH*)*NUMRECORDS);
+    dRecord = (struct floardD**)malloc(sizeof(struct floardD*)*NUMRECORDS);
+    iRecord = (struct floardF**)malloc(sizeof(struct floardF*)*NUMRECORDS);
+
+    for (int i = 0; i < NUMRECORDS; i++) {
+        hRecord[i] = (struct floardH *)malloc(sizeof(struct floardH));
+        iRecord[i] = (struct floardF *)malloc(sizeof(struct floardF));
+        hRecord[i]->h = (float*) malloc(sizeof(float)*N);
+        dRecord[i] = (struct floardD *)malloc(sizeof(struct floardD));
+        dRecord[i]->D = (float**) malloc(sizeof(float*)*N);
+        for (int j = 0; j < N; j++) {
+            dRecord[i]->D[j] = (float*)malloc(sizeof(float)*N);
+        }
+    }
+
+    #ifdef DEBUG
+    printf("Done\n");
+    #endif
 }
 
 void freeMem() {
@@ -462,25 +486,11 @@ void freeMem() {
         cudaFree(kMat[i]);
     }
     cudaFree(kMat);
+
+    free(hRecord);
+    free(dRecord);
 }
 
-// Keep these functions in the same file as CALCSLOPE, or find a way to
-// (efficiently) pass device code through kernal (i.e no memcopies)
-__device__ void funcH(struct floet *mat, float *q, int i) {
-
-}
-
-__device__ void funcJ(struct floet *mat, float *q, int i, int j) {
-
-}
-
-__device__ void funcD(struct floet *mat, float *q, int i, int j, int k, int l) {
-
-}
-
-__device__ void funcG(struct floet *mat, float *q, int i, int j, int k, int l) {
-
-}
 
 // Optimize this for MASSIVE performance increase (optimized matrix multiplication)
 __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
@@ -517,212 +527,75 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
 }
 
 void DP () {
-    #ifdef DEBUG
-    printf("\t: ");
-    #endif
     GENERATOR<<<nob, tpb>>>(master, gen);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCopy: ");
-    #endif
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCopy: ");
-    #endif
+
     COPY<<<nob,tpb>>>(master,prev);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCalcslope: ");
-    #endif
     CALCSLOPE<<<nob,tpb>>>(kMat[0], temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tDPSLOPE1: ");
-    #endif
     DPSLOPE1<<<nob, tpb>>>(kMat, temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCalcslope: ");
-    #endif
     CALCSLOPE<<<nob,tpb>>>(kMat[1], temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCopy: ");
-    #endif
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tDPSLOPE2: ");
-    #endif
     DPSLOPE2<<<nob, tpb>>>(kMat, temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCalcslope: ");
-    #endif
     CALCSLOPE<<<nob,tpb>>>(kMat[2], temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCopy: ");
-    #endif
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tDPSLOPE3: ");
-    #endif
     DPSLOPE3<<<nob, tpb>>>(kMat, temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCalcslope: ");
-    #endif
     CALCSLOPE<<<nob,tpb>>>(kMat[3], temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCopy: ");
-    #endif
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tDPSLOPE4: ");
-    #endif
     DPSLOPE4<<<nob, tpb>>>(kMat, temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCalcslope: ");
-    #endif
     CALCSLOPE<<<nob,tpb>>>(kMat[4], temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCopy: ");
-    #endif
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tDPSLOPE5: ");
-    #endif
     DPSLOPE5<<<nob, tpb>>>(kMat, temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCalcslope: ");
-    #endif
     CALCSLOPE<<<nob,tpb>>>(kMat[5], temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCopy: ");
-    #endif
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tDPSLOPE6: ");
-    #endif
     DPSLOPE6<<<nob, tpb>>>(kMat, temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tCalcslope: ");
-    #endif
     CALCSLOPE<<<nob,tpb>>>(kMat[6], temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tSumDP: ");
-    #endif
     SUMDP<<<nob,tpb>>>(kMat, master);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 
-    #ifdef DEBUG
-    printf("\tDPErr: ");
-    #endif
     DPERROR<<<nob, tpb>>>(kMat, temp);
     checkCudaSyncErr();
-    #ifdef DEBUG
-    printf("Done\n");
-    #endif
 }
 
 void embeddedDP () {
@@ -730,22 +603,31 @@ void embeddedDP () {
     double scale;
     float err, t;
     double qq;
-    double tol = 0.001/l;
+    double tol, etol;
     int last_interval = 0;
     int i, x, y, z, q;
+    etol = 0.001;
+    tol = etol/l;
+    copyToRecords(master, s, r);
+    printMatrix(master->mat, N);
+    printH4interact(master);
     while (s < l) {
         scale = 1.0;
         for (i = 0; i < ATTEMPTS; i++) {
             #ifdef DEBUG
-                printf("Starting DP:\n");
+                printf("(%d) Starting DP: ", i);
             #endif
             DP();
             #ifdef DEBUG
-                printf("DP done\n");
+                printf("DP done");
             #endif
             err = findMax(temp, &x, &y, &z, &q);
             if (roundf(err) == err && roundf(err) == 0) {
                 scale = MAX_SCALE_FACTOR;
+                printf("\n-- ERROR IS ZERO --\n");
+                printMatrix(temp->mat, N);
+                printH4interact(temp);
+                printf("-------------------");
                 break;
             }
             t = readFloet(prev,x,y,z,q);
@@ -760,19 +642,32 @@ void embeddedDP () {
             h *= (float) scale;
             if (s + (double) h > l) h = (float)l - (float)s;
             else if (s + (double)h + 0.5*(double)h > l) h = 0.5f * h;
+            #ifdef DEBUG
+                printf("(h = %.5f)\n", h);
+            #endif
             COPY<<<nob,tpb>>>(prev,master);
             checkCudaSyncErr();
 
         }
-        if ( i >= ATTEMPTS ) { printf("tolerance too small?\n"); exit(-2); }
-        printf("s = %.4f, h = %.4f, scale = %.4f\n", s, h, scale);
-        s += h;
-        h *= scale;
-        if ( last_interval ) break;
-        if (s + (double) h > l) { last_interval = 1; h = (float) l - (float) s; }
-        else if (s + h + 0.5*h > l) h = 0.5 * h;
-        printMatrix(master->mat, N);
-        printf("\n");
+        if ( i >= ATTEMPTS ) {
+            h = h * scale;
+            tol = etol/(l-s);
+            COPY<<<nob,tpb>>>(prev,master);
+            checkCudaSyncErr();
+            printf("-- REACHED MAX ATTEMPTS (h = %.5f, scale = %.3f)\n", h, scale);
+        } else {
+            printf("s = %.4f, h = %.4f, scale = %.4f\n", s, h, scale);
+            s += h;
+            h *= scale;
+            if ( last_interval ) break;
+            if (s + (double) h > l) { last_interval = 1; h = (float) l - (float) s; }
+            else if (s + h + 0.5*h > l) h = 0.5 * h;
+            printMatrix(master->mat, N);
+            printH4interact(master);
+            printf("\n");
+            copyToRecords(master, s, r);
+            if (r < NUMRECORDS) r++;
+        }
     }
 }
 
@@ -786,6 +681,8 @@ double runPRBM(struct Variables *v) {
     embeddedDP();
 
     endTime();
+    outputHRecord("h", N, r, hRecord);
+    outputDRecord("D", N, r, dRecord);
     printf("Done\n");
     freeMem();
     return runTime();
@@ -799,6 +696,19 @@ float readFloet(struct floet *mat, int i, int j, int k, int l) {
 ////////////////////////////////////////////////////////////////////////////////
 // Specific matrix based operations for the interacting model                 //
 ////////////////////////////////////////////////////////////////////////////////
+
+float calcInvariant() {
+    float t = 0.0f;
+    for (int i = 0; i < N; i++) {
+        t += powf(master->mat[i][i], 2.0f);
+
+        for (int j = 0; j < N; j++) {
+            t += 0.5f*powf(master->mat[i][j],2.0f) + master->ten[i][i][j][j]
+                                                   - master->ten[i][j][j][i];
+        }
+    }
+    return t;
+}
 
 float findMax(struct floet *mat, int *x, int *y, int *z, int *q) {
     float c = -1.0f;
@@ -826,4 +736,41 @@ float findMax(struct floet *mat, int *x, int *y, int *z, int *q) {
         }
     }
     return c;
+}
+
+void copyToRecords(struct floet *mat, double t, int index) {
+    if (index >= NUMRECORDS) return;
+    for (int i = 0; i < N; i++) {
+        hRecord[index]->h[i] = mat->mat[i][i];
+        for (int j = 0; j < N; j++) {
+            dRecord[index]->D[i][j] = mat->ten[i][i][j][j] - mat->ten[i][j][j][i];
+        }
+    }
+    iRecord[index]->f = calcInvariant();
+    hRecord[index]->t = t;
+    dRecord[index]->t = t;
+    iRecord[index]->t = t;
+}
+
+void printH4(struct floet *mat) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            printf("H4[%d][%d]:\n",i,j);
+            for (int k = 0; k < N; k++) {
+                for (int l = 0; l < N; l++) {
+                    printf("%.3f", mat->ten[i][j][k][l]);
+                    if (l < N-1) printf(",");
+                }
+                printf("\n");
+            }
+            printf("\n");
+        }
+    }
+}
+
+void printH4interact(struct floet *mat) {
+    for (int j = 0; j < N; j++) {
+        printf("D[0][%d]: %.3f ,\n",j,mat->ten[0][0][j][j] - mat->ten[0][j][j][0]);
+    }
+    printf("\n");
 }

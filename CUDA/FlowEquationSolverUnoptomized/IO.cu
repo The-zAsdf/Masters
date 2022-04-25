@@ -212,3 +212,55 @@ void printErrorMatrix(float **mat, int n) {
         printf("\n");
     }
 }
+
+void outputHRecord(const char *fileName, int n, int r, struct floardH **hR) {
+
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "val");
+
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < n; j++) {
+            fprintf(fp,"%d,%d,%.3f,%.3f\n", i, j, hR[i]->t, hR[i]->h[j]);
+        }
+    }
+}
+
+void outputDRecord(const char *fileName, int n, int r, struct floardD **dR) {
+
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "val");
+
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < n; j++) {
+            for (int k = 0; k < n; k++) {
+                fprintf(fp,"%d,%d,%d,%.3f,%.3f\n", i, j, k, dR[i]->t, dR[i]->D[j][k]);
+            }
+        }
+    }
+}

@@ -11,6 +11,21 @@ typedef struct Variables{
     double steps;
 } Var;
 
+typedef struct floardH {
+    float *h;
+    double t;
+}fdH;
+
+typedef struct floardD {
+    float **D;
+    double t;
+}fdD;
+
+typedef struct floardF {
+    float f;
+    double t;
+}fdF;
+
 void readInput(const char *fileName, Var *v);
 void readArgs(int argc,char *argv[], Var *v);
 void printVar(Var *var);
@@ -21,5 +36,7 @@ void outputDiag(const char *filename, float ***hist, int len, int n);
 void outputElements(const char *filename, float ***hist, int len, int n);
 void printMatrix(float **mat, int n);
 void printErrorMatrix(float **mat, int n);
+void outputHRecord(const char *fileName, int n, int r, struct floardH **hR);
+void outputDRecord(const char *fileName, int n, int r, struct floardD **dR);
 
 #endif
