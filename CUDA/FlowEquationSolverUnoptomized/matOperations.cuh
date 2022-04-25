@@ -86,8 +86,8 @@ __global__ void GENERATOR(struct floet *src, struct floet *eta) {
             if (i == j && k != l) {
                 eta->ten[i][i][k][l] += src->mat[k][l]*(src->ten[i][i][k][k]
                                       + src->ten[k][k][i][i]
-                                      + src->ten[l][i][i][l]
                                       + src->ten[i][l][l][i]
+                                      + src->ten[l][i][i][l]
                                       - src->ten[k][i][i][k]
                                       - src->ten[i][k][k][i]
                                       - src->ten[l][l][i][i]
