@@ -23,31 +23,31 @@ for row in rows:
     c = row[0]
 
 dY = []
-el = 0
 for i in range(0,n):
     dY.append([])
-    el += 1
     for j in range(0,n):
         dY[i].append([])
-        el += 1
-
-for i in range(0,n):
-    for j in range(0,n):
         for row in rows:
             if int(row[1]) == i and int(row[2]) == j:
                 dY[i][j].append(float(row[4]))
 
-# for i in range(0, el):
-#     for j in range(0, el):
-#         plt.plot(np.asarray(dX), np.asarray(dY[i][j]), label = 'h[{}][{}]'.format(i,j))
+# for i in range(0,n):
+#     for j in range(0,n):
+#         for row in rows:
+#             if int(row[1]) == i and int(row[2]) == j:
+#                 dY[i][j].append(float(row[4]))
 
-# plt.plot(np.asarray(dX), np.asarray(dY[0][0]), label = 'h[{}][{}]'.format(0,0))
-# plt.xlabel("Time")
-# plt.ylabel("D[i][j]")
-# plt.title("NN interactions vs. time")
-# plt.legend()
+for i in range(0, n):
+    for j in range(0, n):
+        if i != j:
+            plt.plot(np.asarray(dX), np.asarray(dY[i][j]), label = 'D[{}][{}]'.format(i,j))
 
-# plt.show()
+plt.xlabel("Time")
+plt.ylabel("D[i][j]")
+plt.title("NN interactions vs. time")
+plt.legend()
+plt.savefig('plots/Dplot.png')
+plt.show()
 
-print(dX)
-print(dY[1][1])
+# print(dX)
+# print(dY[0][1])

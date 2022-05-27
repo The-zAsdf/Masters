@@ -23,12 +23,15 @@ hY = []
 el = 0
 for i in range(0,n):
     hY.append([])
-    el += 1
-
-for i in range(0,n):
     for row in rows:
         if int(row[1]) == i:
             hY[i].append(float(row[3]))
+    el += 1
+
+# for i in range(0,n):
+#     for row in rows:
+#         if int(row[1]) == i:
+#             hY[i].append(float(row[3]))
 
 for q in range(0, el):
     plt.plot(np.asarray(hX), np.asarray(hY[q]), label = 'h[{}]'.format(q))
@@ -37,5 +40,5 @@ plt.xlabel("Time")
 plt.ylabel("h[i]")
 plt.title("interaction terms vs. time")
 plt.legend()
-
+plt.savefig('plots/hplot.png')
 plt.show()

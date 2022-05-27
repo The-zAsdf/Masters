@@ -35,12 +35,21 @@ void readInput(const char *fileName, Var *v) {
                     token = strtok(NULL, " ");
                     v->steps = atof(token);
                     break;
+                case 'e':
+                    token = strtok(NULL, " ");
+                    v->etol = atof(token);
+                    break;
+                case 'D':
+                    token = strtok(NULL, " ");
+                    v->D = atof(token);
+                    break;
                 case 'N':
                     for (int i = 0; i < v->R; i++) {
                         token = strtok(NULL, " ");
                         v->N[i] = atoi(token);
                     }
                     break;
+
             }
         }
 
@@ -104,33 +113,7 @@ void outputData (const char *fileName, double y) {
     fclose(fp);
 }
 
-void outputHistoryMatrices(const char *fileName, float ***hist, int len, int n) {
-    FILE *fp;
-    char str[255];
-    const char *dir = "data/";
-    const char *ext = ".txt";
-    strcpy(str, dir);
-    strcat(str, fileName);
-    strcat(str, ext);
-
-    if ((fp = fopen(str,"w+")) == NULL) {
-        fprintf(stderr, "Error: File cannot be created\n");
-        exit(-1);
-    }
-
-    for (int i = 0; i < len; i++) {
-        for (int j = 0; j < n; j++) {
-            for (int k = 0; k < n; k++) {
-                fprintf(fp,"%f",hist[i][min(j,k)][abs(j-k)]);
-                if (k != n-1) fprintf(fp,",");
-            }
-            fprintf(fp,"\n");
-        }
-    }
-    fclose(fp);
-}
-
-void outputDiag(const char *fileName, float ***hist, int len, int n) {
+void outputDiag(const char *fileName, double ***hist, int len, int n) {
     FILE *fp;
     char str[255];
     const char *dir = "data/";
@@ -154,7 +137,7 @@ void outputDiag(const char *fileName, float ***hist, int len, int n) {
     fclose(fp);
 }
 
-void outputElements(const char *fileName, float ***hist, int len, int n) {
+void outputElements(const char *fileName, double ***hist, int len, int n) {
     FILE *fp;
     char str[255];
     const char *dir = "data/";
@@ -191,9 +174,79 @@ void printVar(Var *var) {
     for (int i = 0; i < var->R; i++) { printf(" %d", var->N[i]); }
     printf("\n");
     printf("steps: %.2f\n", var->steps);
+    printf("etol: %.10f\n", var->etol);
+    printf("D: %.5f\n", var->D);
 }
 
-void printMatrix(float **mat, int n) {
+void outputH2(const char *fileName, double** mat, int N) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"{");
+    for (int i = 0; i < N; i++) {
+        fprintf(fp,"{");
+        for (int j = 0; j < N; j++) {
+            fprintf(fp,"%.5f", mat[i][j]);
+            if (j < N-1) fprintf(fp,",");
+        }
+        fprintf(fp,"}");
+        if (i < N-1) fprintf(fp,",");
+    }
+    fprintf(fp,"}");
+    fclose(fp);
+}
+
+void outputH4(const char *fileName, double ****mat, int N) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"{");
+    for (int i = 0; i < N; i++) {
+        fprintf(fp,"{");
+        for (int j = 0; j < N; j++) {
+            fprintf(fp,"{");
+            for (int k = 0; k < N; k++) {
+                fprintf(fp,"{");
+                for (int l = 0; l < N; l++) {
+                    fprintf(fp,"%.5f", mat[i][j][k][l]);
+                    if (l < N-1) fprintf(fp,",");
+                }
+                fprintf(fp,"}");
+                if (k < N-1) fprintf(fp,",");
+            }
+            fprintf(fp,"}");
+            if (j < N-1) fprintf(fp,",");
+        }
+        fprintf(fp,"}");
+        if (i < N-1) fprintf(fp,",");
+    }
+    fprintf(fp,"}");
+    fclose(fp);
+}
+
+void printMatrix(double **mat, int n) {
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
             printf("%.3f",mat[i][j]);
@@ -203,7 +256,7 @@ void printMatrix(float **mat, int n) {
     }
 }
 
-void printErrorMatrix(float **mat, int n) {
+void printErrorMatrix(double **mat, int n) {
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
             printf("%.6f",mat[min(i,j)][abs(i-j)]);
@@ -233,9 +286,10 @@ void outputHRecord(const char *fileName, int n, int r, struct floardH **hR) {
 
     for (int i = 0; i < r; i++) {
         for (int j = 0; j < n; j++) {
-            fprintf(fp,"%d,%d,%.3f,%.3f\n", i, j, hR[i]->t, hR[i]->h[j]);
+            fprintf(fp,"%d,%d,%.3f,%.8f\n", i, j, hR[i]->t, hR[i]->h[j]);
         }
     }
+    fclose(fp);
 }
 
 void outputDRecord(const char *fileName, int n, int r, struct floardD **dR) {
@@ -263,4 +317,165 @@ void outputDRecord(const char *fileName, int n, int r, struct floardD **dR) {
             }
         }
     }
+    fclose(fp);
+}
+
+void outputGRecord(const char *fileName, int n, int r, struct floardG **dR) {
+
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "val");
+
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < n; j++) {
+            for (int k = 0; k < n; k++) {
+                for (int l = 0; l < n; l++) {
+                    for (int q = 0; q < n; q++) {
+                        fprintf(fp,"%d,%d,%d,%d,%d,%.3f,%.5f\n", i, j, k, l, q, dR[i]->t, dR[i]->G[j][k][l][q]);
+                    }
+                }
+            }
+        }
+    }
+    fclose(fp);
+}
+
+void outputiRecord(const char *fileName, int n, int r, struct floardF **dR) {
+
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "invariant");
+
+    for (int i = 0; i < r; i++) {
+        fprintf(fp,"%d,%.3f,%.3f\n", i, dR[i]->t, dR[i]->f);
+    }
+    fclose(fp);
+}
+
+void outputH2Record(const char *fileName, int n, int r, struct floardF **dR) {
+
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "invariant");
+
+    for (int i = 0; i < r; i++) {
+        fprintf(fp,"%d,%.3f,%.5f\n", i, dR[i]->t, dR[i]->f);
+    }
+    fclose(fp);
+}
+
+void outputH4Record(const char *fileName, int n, int r, struct floardF **dR) {
+
+    FILE *fp;
+    char str[255];
+    const char *dir = "data/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"w+")) == NULL) {
+        fprintf(stderr, "Error: File cannot be created\n");
+        exit(-1);
+    }
+
+    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "invariant");
+
+    for (int i = 0; i < r; i++) {
+        fprintf(fp,"%d,%.3f,%.5f\n", i, dR[i]->t, dR[i]->f);
+    }
+    fclose(fp);
+}
+
+void inputH2(const char *fileName, int n, double **mat) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "input/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"r")) == NULL) {
+        fprintf(stderr, "Error: File cannot be read\n");
+        exit(-1);
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            if (fscanf(fp,"%lf\n ",&mat[i][j]) != 1) {
+                printf("ERROR: Reading in H2 (%d, %d)\n", i, j);
+                exit(-1);
+            }
+        }
+    }
+    fclose(fp);
+}
+
+void inputH4(const char *fileName, int n, double ****ten) {
+    FILE *fp;
+    char str[255];
+    const char *dir = "input/";
+    const char *ext = ".txt";
+
+    strcpy(str, dir);
+    strcat(str, fileName);
+    strcat(str, ext);
+
+    if ((fp = fopen(str,"r")) == NULL) {
+        fprintf(stderr, "Error: File cannot be read\n");
+        exit(-1);
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            for (int k = 0; k < n; k++) {
+                for (int l = 0; l < n; l++) {
+                    if (fscanf(fp,"%lf\n",&ten[i][j][k][l]) != 1) {
+                        printf("ERROR: Reading in H4\n");
+                        exit(-1);
+                    }
+                }
+            }
+        }
+    }
+    fclose(fp);
 }
