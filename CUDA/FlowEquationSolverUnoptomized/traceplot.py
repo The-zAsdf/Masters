@@ -4,11 +4,12 @@ import math
 import matplotlib.pyplot as plt
 
 def test(h,H2,D,N,n,r):
-    THamSq=traceHamSq(h,H2,D,N,n,r)
-    THamSS=traceHamSS(h,H2,D,N,n,r)
+    TH2D = traceH2D(D,h,N,n,r)
+    TH2Sq = traceH2Sq(H2,h,N,n,r)
+    TDSq = traceDSq(D,N,n,r)
     val = []
     for i in range(0,r):
-        val.append(float(THamSq[i]-THamSS[i]))
+        val.append(float(TH2Sq[i]+TDSq[i])+TH2D[i])
     return val
 
 def traceHam(h,H2,D,N,n,r):
@@ -48,8 +49,9 @@ def traceDSq(D,N,n,r):
             for k in range(0,n):
                 q += 8.0*pow(N,2)*pow(Nbar,2)*pow(D[j][k][i],2.0)
                 for l in range(0,n):
-                    q += 16.0*pow(N,3.0)*Nbar*D[j][k][i]*D[k][j][i]
-        val.append(float(q+pow(TD[i],2.0)))
+                    q += 16.0*pow(N,3.0)*Nbar*D[j][k][i]*D[k][l][i]
+        val.append(float(q))
+        # val.append(float(q+pow(TD[i],2.0)))
     return val
 
 def traceH2D(D,h,N,n,r):
@@ -62,7 +64,8 @@ def traceH2D(D,h,N,n,r):
         for j in range(0,n):
             for k in range(0,n):
                 q += h[j][i]*D[j][k][i]
-        val.append(float(Th[i]*TD[i]-pow(N,2.0)*Nbar*q))
+        val.append(float(-8.0*pow(N,2.0)*Nbar*q))
+        # val.append(float(2.0*Th[i]*TD[i]-8.0*pow(N,2.0)*Nbar*q))
     return val
 
 def traceH2Sq(H2,h,N,n,r):
@@ -74,7 +77,17 @@ def traceH2Sq(H2,h,N,n,r):
         for j in range(0,n):
             for k in range(0,n):
                 q += H2[j][k][i]*H2[k][j][i]
-        val.append(float(pow(Th[i],2.0)+N*Nbar*q))
+        # val.append(float(pow(Th[i],2.0)+N*Nbar*q))
+        val.append(float(N*Nbar*q))
+    return val
+
+def traceH2SqMinH2(H2,h,N,n,r):
+    Th = traceH2(h,N,n,r)
+    TH2Sq = traceH2Sq(H2,h,N,n,r)
+    Nbar = 1.0 - N
+    val = []
+    for i in range(0,r):
+        val.append(float(TH2Sq[i]-pow(Th[i],2.0)))
     return val
 
 def traceD(D,N,n,r):
@@ -164,20 +177,22 @@ def main():
     THamSS = traceHamSS(h,H2,D,N,n,r)
     Test = test(h,H2,D,N,n,r)
     THam = traceHam(h,H2,D,N,n,r)
+    # TH2SqMinH2 = traceH2SqMinH2(H2,h,N,n,r)
     # plt.plot(np.asarray(t), np.asarray(TH2), label = '<h>')
     # plt.plot(np.asarray(t), np.asarray(TD), label = '<D>')
     # plt.plot(np.asarray(t), np.asarray(TH2D), label = '<hD>')
     # plt.plot(np.asarray(t), np.asarray(TH2Sq), label = '<h^2>')
+    # plt.plot(np.asarray(t), np.asarray(TH2SqMinH2), label = '<h^2>-<h>^2')
     # plt.plot(np.asarray(t), np.asarray(TDSq), label = '<D^2>')
-    plt.plot(np.asarray(t), np.asarray(THam), label = '<H>')
-    plt.plot(np.asarray(t), np.asarray(THamSq), label = '<H^2>')
-    plt.plot(np.asarray(t), np.asarray(THamSS), label = '<H>^2')
+    # plt.plot(np.asarray(t), np.asarray(THam), label = '<H>')
+    # plt.plot(np.asarray(t), np.asarray(THamSq), label = '<H^2>')
+    # plt.plot(np.asarray(t), np.asarray(THamSS), label = '<H>^2')
     plt.plot(np.asarray(t), np.asarray(Test), label = '<H^2>-<H>^2')
     plt.xlabel("Time")
     plt.ylabel("Invariance")
-    plt.title("Invariance vs. time")
+    plt.title("Various traces vs. time")
     plt.legend()
-    # plt.savefig('plots/iplot.png')
+    plt.savefig('plots/traceplot.png')
     plt.xlim([0,t[len(t)-1]])
     plt.ylim([-5,10])
     plt.show()

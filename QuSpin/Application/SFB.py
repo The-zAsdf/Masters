@@ -7,7 +7,7 @@ from math import sqrt
 def genW():
     return (random.random()-0.5)*2.0*5.0
 ##### define model parameters #####
-L=20 # system size
+L=4 # system size
 J=1.0 # hopping strength
 D=0.025
 
@@ -22,8 +22,9 @@ for i in range(int(n)):
     q.append(float(rows[i*int(n)+i]))
 
 ##### construct basis
-basis=spinless_fermion_basis_1d(L=L, Nf=L//2)
+basis=spinless_fermion_basis_1d(L=L, Nf=1)
 print(basis)
+print(basis.states)
 # define site-coupling lists for operators
 n_pot=[[genW(),i] for i in range(L)]
 J_nn_right=[[-J,i,i+1] for i in range(L-1)]
