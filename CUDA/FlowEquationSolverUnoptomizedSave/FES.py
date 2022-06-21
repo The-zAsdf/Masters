@@ -220,7 +220,7 @@ def main():
     f = 1
 
     # Create new inital h values for FES
-    genh.hBR(W,L)
+    # genh.hBR(W,L)
     # genh.hSR(W,L)
     # genh.hGR(W,L)
     # quit(0)

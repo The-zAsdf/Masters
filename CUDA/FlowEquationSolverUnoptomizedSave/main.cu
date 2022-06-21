@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
         // #endif
 
         while (g->index < g->R) {
-            t[g->index] = runPRBM(g);
+            t[g->index] = runFES(g);
             g->index++;
         }
         outputData("time",g->N,t, g->R);
@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
         readArgs(argc, argv, g);
         printVar(g);
         t = (double *) malloc(sizeof(double));
-        t[0] = runPRBM(g);
+        t[0] = runFES(g);
         outputData("time",t[0]);
     }
 

@@ -37,6 +37,5 @@ def calcHam(L,J,D,Nf=1):
     H=hamiltonian(static,dynamic,dtype=np.float64,basis=basis, **no_checks)
 
     eval,estates=H.eigh()
-    # print(basis)
-    # print(eval)
+    print(H.toarray())
     return basis,H

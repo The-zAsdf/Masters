@@ -70,19 +70,16 @@ def getDFES(L):
             c = int(rows[i][0])
             index = count
         count += 1
-
     # store D values in q array
     q = []
     for i in range(L):
         q.append([])
         for j in range(L):
             q[i].append(float(rows[index+i*L+j][4]))
-
     # Reverse the array
-    for i in range(L):
-        q[i] = q[i][::-1]
-    q = q[::-1]
-
+    # for i in range(L):
+    #     q[i] = q[i][::-1]
+    # q = q[::-1]
     return q
 
 def gethFES(L):
@@ -109,7 +106,8 @@ def gethFES(L):
         q.append(float(rows[index+i][3]))
 
     # return reversed list, corresponds to ED evals
-    return q[::-1]
+    # return q[::-1]
+    return q
 
 # Calculate the relative error of eigenvalues
 def relativeError(evalED,evalFE,L):
@@ -118,7 +116,7 @@ def relativeError(evalED,evalFE,L):
     ep = 0.0
     for i in range(len(evalED)):
         ep += abs((evalED[i]-evalFE[i])/evalED[i])
-    return 0.5**L*ep
+    return pow(0.5,L)*ep
 
 def runFES(W,J,D,h,S,L,e,c):
     # Run FES
@@ -198,8 +196,8 @@ def evalComb(h,D,L,Nf):
         for j in range(Nf):
             b += h[i[j]]
         for j in list(csub):
-            # THIS SHOULD BE +=
-            b -= D[j[0]][j[1]]
+            # THIS SHOULD BE -= DUE TO CONVENTION CHANGING
+            b += D[j[0]][j[1]]
         q.append(b)
     return q
 
@@ -217,10 +215,10 @@ def main():
     h = readInput('h', rows)
     S = readInput('S', rows)
     # f = int(readInput('f', rows))
-    f = 1
+    f = 2
 
     # Create new inital h values for FES
-    genh.hBR(W,L)
+    # genh.hBR(W,L)
     # genh.hSR(W,L)
     # genh.hGR(W,L)
     # quit(0)

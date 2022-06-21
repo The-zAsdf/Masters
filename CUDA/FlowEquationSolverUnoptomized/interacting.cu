@@ -11,10 +11,12 @@
 #include "distribution.h"
 #include "matOperations.cuh"
 
-#define NUMRECORDS 400
+// #define DEBUG
+
+#define NUMRECORDS 4000
 #define ATTEMPTS 12
 #define MIN_SCALE_FACTOR 0.125
-#define MAX_SCALE_FACTOR 2.0
+#define MAX_SCALE_FACTOR 1.5
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -32,6 +34,7 @@ __managed__ double **invGausD;
 __managed__ double *uniform;
 __managed__ double *hRead;
 __managed__ ind **threadIndex;
+__managed__ ind **threadIndexOpt;
 
 __managed__ double W;
 __managed__ double D;
@@ -40,14 +43,16 @@ __managed__ double etol;
 __managed__ double J;
 __managed__ int N;
 __managed__ int numElem;    // Number of elements
+__managed__ int numElemOpt;    // Number of elements
 __managed__ double h;
 __managed__ size_t tpb;     // Threads per block
+__managed__ size_t tpbOpt;     // Threads per block
 __managed__ size_t nob;     // Number of blocks
+__managed__ size_t nobOpt;     // Number of blocks
 double l;                   // Total simulation steps
 
 floardH **hRecord;
 floardD **dRecord;
-// floardG **gRecord;
 floardD **H2Record;
 int r;
 int count;
@@ -97,10 +102,7 @@ __global__ void generateMasterH2(curandState_t* states) {
         l = threadIndex[id]->l;
 
         if (k == -1 && l == -1 && (i == j)) { // init h_i
-            // phi = curand_uniform(&states[id])*2.0*M_PI;
-            // phi = 0.0;
-            // master->mat[i][j] = W*cosh(2.0*M_PI/SILVER_RATIO)*cos(phi);
-            master->mat[i][j] = hRead[i];
+            master->mat[i][j] = W*hRead[i];
         } else if (k == -1 && l == -1 && (i > j)){ // init :J:_{ij}
             if (i == j + 1 || j == i + 1) {
                 master->mat[i][j] = J;
@@ -123,10 +125,10 @@ __global__ void generateMasterH4(curandState_t* states) {
             // PLACEHOLDER //
             if ( i == k + 1 || k == i + 1 || i == l + 1 || l == i + 1) {
                 if (i == k && j == l) {
-                    master->ten[i][j][k][l] = -D;
+                    master->ten[i][j][k][l] = -D/4.0;
                 }
                 if (i == l && j == k) {
-                    master->ten[i][j][k][l] = D;
+                    master->ten[i][j][k][l] = D/4.0;
                 }
             }
         }
@@ -163,12 +165,33 @@ void setVariables(struct Variables *v) {
             }
         }
     }
-    determineThreadsAndBlocks();
+
+    numElemOpt = 0;
+    for (int i = 0; i < N; i++) {
+        for (int j = i; j < N; j++) {
+            numElemOpt++;
+        }
+    }
+
+    for (int i = 0; i < N; i++) {
+        for (int j = i+1; j < N; j++) {
+            for (int k = 0; k < N; k++) {
+                for (int l = k+1; l < N; l++) {
+                    numElemOpt++;
+                }
+            }
+        }
+    }
+
+    determineThreadsAndBlocks(&nob, &tpb, numElem);
+    determineThreadsAndBlocks(&nobOpt, &tpbOpt, numElemOpt);
+    printf("numElem = %d, nob = %zd, tpb = %zd\n", numElem, nob, tpb);
+    printf("numElemOpt = %d, nobOpt = %zd, tpbOpt = %zd\n", numElemOpt, nobOpt, tpbOpt);
 }
 
-size_t calculateBlocks(size_t threads) {
+size_t calculateBlocks(size_t threads, int num) {
     size_t blocks = 1;
-    for (size_t i = threads; i < numElem; i += threads) {
+    for (size_t i = threads; i < num; i += threads) {
         if (blocks < threads*2 || threads == 1024) {
             blocks++;
         } else {
@@ -182,7 +205,7 @@ size_t calculateBlocks(size_t threads) {
  *  close as possible to the threads per block.
  *  Improves efficiency of CUDA calculations
  */
-void determineThreadsAndBlocks() {
+void determineThreadsAndBlocks(size_t *b, size_t *t, int num) {
     cudaDeviceProp props;
     int deviceId;
     size_t blocks;
@@ -191,10 +214,10 @@ void determineThreadsAndBlocks() {
     cudaGetDeviceProperties(&props, deviceId);
     do {
         threads += props.warpSize;
-        blocks = calculateBlocks(threads);
+        blocks = calculateBlocks(threads, num);
     } while (blocks == 0 && threads < 1024);
-    nob = blocks;
-    tpb = threads;
+    *b = blocks;
+    *t = threads;
 }
 
 __global__ void initStates(unsigned int seed, curandState_t* states) {
@@ -389,8 +412,15 @@ void init() {
     #endif
     err = cudaMallocManaged(&threadIndex, sizeof(struct index*)*numElem);
     if (err != cudaSuccess) CUDAERROR(err);
+
+    err = cudaMallocManaged(&threadIndexOpt, sizeof(struct index*)*numElemOpt);
+    if (err != cudaSuccess) CUDAERROR(err);
     for (int i = 0; i < numElem; i++) {
         err = cudaMallocManaged(&threadIndex[i], sizeof(struct index));
+        if (err != cudaSuccess) CUDAERROR(err);
+    }
+    for (int i = 0; i < numElemOpt; i++) {
+        err = cudaMallocManaged(&threadIndexOpt[i], sizeof(struct index));
         if (err != cudaSuccess) CUDAERROR(err);
     }
     #ifdef DEBUG
@@ -425,6 +455,40 @@ void init() {
             }
         }
     }
+
+    count = 0;
+    for (int i = 0; i < N; i++) {
+        for (int j = i; j < N; j++) {
+            threadIndexOpt[count]->i = i;
+            threadIndexOpt[count]->j = j;
+            threadIndexOpt[count]->k = -1;
+            threadIndexOpt[count]->l = -1;
+            count++;
+        }
+    }
+
+    for (int i = 0; i < N; i++) {
+        for (int j = i+1; j < N; j++) {
+            for (int k = 0; k < N; k++) {
+                for (int l = k+1; l < N; l++) {
+                    // each rank 4 element has a thread
+                    threadIndexOpt[count]->i = i;
+                    threadIndexOpt[count]->j = j;
+                    threadIndexOpt[count]->k = k;
+                    threadIndexOpt[count]->l = l;
+                    count++;
+                }
+            }
+        }
+    }
+
+    // for (int i = 0; i < count; i++) {
+    //     printf("ThreadOpt[%d] -> (%d,%d,%d,%d)\n", i,threadIndexOpt[i]->i
+    //                                                 ,threadIndexOpt[i]->j
+    //                                                 ,threadIndexOpt[i]->k
+    //                                                 ,threadIndexOpt[i]->l);
+    // }
+    // exit(0);
     #ifdef DEBUG
     printf("Done\n");
 
@@ -522,20 +586,18 @@ void init() {
     #endif
 }
 
-
 // Optimize this for MASSIVE performance increase (optimized matrix multiplication)
 __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
-    double num;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
 
-        if (k == -1 && l == -1 && i >= j) {
+        if (k == -1 && l == -1 && i <= j) {
             kM->mat[i][j] = 0.0;
             // [eta(2),H(2)]
             for (int q = 0; q < N; q++) {
@@ -544,12 +606,11 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
             }
             if (i != j) kM->mat[j][i] = kM->mat[i][j];
         } else if (k != -1 && l != -1) {
-            kM->ten[i][j][k][l] = 0.0;
-            if (i > j && k > l) {
-                num = 0.0;
+            if (i < j && k < l) {
+                kM->ten[i][j][k][l] = 0.0;
                 // [eta(2),H(4)] + [eta(4),H(2)]
                 for (int q = 0; q < N; q++) {
-                     num += mat->ten[q][j][k][l]*gen->mat[i][q]
+                     kM->ten[i][j][k][l] += mat->ten[q][j][k][l]*gen->mat[i][q]
                                          + mat->ten[i][j][l][q]*gen->mat[q][k]
                                          - mat->ten[q][i][k][l]*gen->mat[j][q]
                                          - mat->ten[i][j][k][q]*gen->mat[q][l]
@@ -561,89 +622,67 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
                 // [eta(4),H(4)] (ommit O(6) terms)
                 for (int x = 0; x < N; x++) {
                     for (int y = 0; y < N; y++) {
-                        num += 2.0*(gen->ten[i][j][x][y]*mat->ten[y][x][k][l]
+                        kM->ten[i][j][k][l] += 2.0*(gen->ten[i][j][x][y]*mat->ten[y][x][k][l]
                                              - mat->ten[i][j][x][y]*gen->ten[y][x][k][l]);
                     }
                 }
 
                 // Enforce symmetry
-                kM->ten[i][j][k][l] = num;
-                kM->ten[j][i][k][l] = -num;
-                kM->ten[i][j][l][k] = -num;
-                kM->ten[j][i][l][k] = num;
+                kM->ten[j][i][k][l] = -kM->ten[i][j][k][l];
+                kM->ten[i][j][l][k] = -kM->ten[i][j][k][l];
+                kM->ten[j][i][l][k] = kM->ten[i][j][k][l];
             }
         }
     }
 }
 
 void DP () {
-    RESET<<<nob, tpb>>>(gen);
-    checkCudaSyncErr();
-
-    GENERATOR<<<nob, tpb>>>(master, gen);
-    checkCudaSyncErr();
-
-    COPY<<<nob,tpb>>>(master,temp);
+    GENERATOR<<<nobOpt,tpbOpt>>>(master, gen);
     checkCudaSyncErr();
 
     COPY<<<nob,tpb>>>(master,prev);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[0], temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[0], master);
     checkCudaSyncErr();
 
-    DPSLOPE1<<<nob, tpb>>>(kMat, temp);
+    DPSLOPE1<<<nobOpt, tpbOpt>>>(kMat, temp, master);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[1], temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[1], temp);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,temp);
+    DPSLOPE2<<<nobOpt, tpbOpt>>>(kMat, temp, master);
     checkCudaSyncErr();
 
-    DPSLOPE2<<<nob, tpb>>>(kMat, temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[2], temp);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[2], temp);
+    DPSLOPE3<<<nobOpt, tpbOpt>>>(kMat, temp, master);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[3], temp);
     checkCudaSyncErr();
 
-    DPSLOPE3<<<nob, tpb>>>(kMat, temp);
+    DPSLOPE4<<<nobOpt, tpbOpt>>>(kMat, temp, master);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[3], temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[4], temp);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,temp);
+    DPSLOPE5<<<nobOpt, tpbOpt>>>(kMat, temp, master);
     checkCudaSyncErr();
 
-    DPSLOPE4<<<nob, tpb>>>(kMat, temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[5], temp);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[4], temp);
+    DPSLOPE6<<<nobOpt, tpbOpt>>>(kMat, temp, master);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[6], temp);
     checkCudaSyncErr();
 
-    DPSLOPE5<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[5], temp);
-    checkCudaSyncErr();
-
-    COPY<<<nob,tpb>>>(master,temp);
-    checkCudaSyncErr();
-
-    DPSLOPE6<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[6], temp);
-    checkCudaSyncErr();
-
-    SUMDP<<<nob,tpb>>>(kMat, master, ct);
+    SUMDP<<<nobOpt, tpbOpt>>>(kMat, master, ct);
     checkCudaSyncErr();
 
     DPERROR<<<nob, tpb>>>(kMat, temp);
@@ -652,8 +691,8 @@ void DP () {
 
 void embeddedDP () {
     double s = 0.0;
-    count = 0;
     double scale;
+    double scaleprev = MAX_SCALE_FACTOR;
     double err, t;
     double qq;
     double tol;
@@ -666,7 +705,6 @@ void embeddedDP () {
     #ifndef SUPPRESSOUTPUT
     printMatrix(master->mat, N);
     printH4interact(master);
-    printH4(master);
     #endif
     while (s < l) {
         scale = 1.0;
@@ -687,6 +725,7 @@ void embeddedDP () {
 
             // Set the scale
             scale = 0.8 * sqrt( sqrt ( tol * qq / err ) );
+            if (scale-scaleprev > 0.1) scale = scaleprev+0.1;
             scale = min( max(scale,MIN_SCALE_FACTOR), MAX_SCALE_FACTOR);
 
             // If the error is small enough, then no more attempts are required.
@@ -695,7 +734,7 @@ void embeddedDP () {
             // Update the scale accordingly
             h *= scale;
             if (s + h > l) h = l - s;
-            else if (s + (double)h + 0.5*(double)h > l) h = 0.5 * h;
+            else if (s + h + 0.5*h > l) h = 0.5 * h;
 
             // Restart the calculation.
             COPY<<<nob,tpb>>>(prev,master);
@@ -718,15 +757,16 @@ void embeddedDP () {
             #endif
             copyToRecords(master, s, r);
             if (r < NUMRECORDS) r++;
-            if ( last_interval ) break;
+            if (last_interval) break;
             if (s + h > l) { last_interval = 1; h = l - s; }
             else if (s + h + 0.5*h > l) h = 0.5 * h;
-            printf("s = %.4f, h = %.4f, scaled = %.4f\n", s, h, scale);
+            printf("s = %.4f, h = %.4f, scaled = %.4f (%.4f), r = %d\n", s, h, scale, scaleprev, r);
+            scaleprev = scale;
         }
     }
 }
 
-double runPRBM(struct Variables *v) {
+double runFES(struct Variables *v) {
     #ifndef SUPPRESSOUTPUT
     printf("Setting variables:\n");
     #endif
@@ -735,6 +775,9 @@ double runPRBM(struct Variables *v) {
     printf("Done\nInitializing:... ");
     #endif
     init();
+    #ifndef SUPPRESSOUTPUT
+    printf("Done\nOutput initial Hamiltonian:... ");
+    #endif
     outputH2Qu("H2", master->mat, N);
     outputHamMathematica("i", master->mat,master->ten, N);
     #ifndef SUPPRESSOUTPUT
@@ -742,15 +785,14 @@ double runPRBM(struct Variables *v) {
     #endif
     startTime();
     embeddedDP();
-
     endTime();
+    #ifndef SUPPRESSOUTPUT
+    printf("Done\n");
+    #endif
     outputHRecord("h", N, r, hRecord);
     outputDRecord("D", N, r, dRecord);
     outputDRecord("H2mat", N, r, H2Record);
     outputHamMathematica("f", master->mat,master->ten, N);
-    #ifndef SUPPRESSOUTPUT
-    printf("Done\n");
-    #endif
     return runTime();
 }
 
@@ -762,6 +804,25 @@ double readFloet(struct floet *mat, int i, int j, int k, int l) {
 ////////////////////////////////////////////////////////////////////////////////
 // Specific matrix based operations for the interacting model                 //
 ////////////////////////////////////////////////////////////////////////////////
+
+void correctScale(double *scale, double prev, double dprev) {
+    double c;
+    if (*scale > prev) {
+        if (prev-dprev > 0.0) c = min(*scale-prev,prev-dprev);
+        else c = *scale-prev;
+        if (c > 0.05) *scale = prev+0.01;
+    }
+}
+
+int isDiag(struct floet *mat) {
+    int c = 1;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            if (i != j && mat->mat[i][j] != 0.0) c = 0;
+        }
+    }
+    return c;
+}
 
 double findMax(struct floet *mat, int *x, int *y, int *z, int *q) {
     double c = -1.0;
@@ -796,19 +857,14 @@ void copyToRecords(struct floet *mat, double t, int index) {
     for (int i = 0; i < N; i++) {
         hRecord[index]->h[i] = mat->mat[i][i];
         for (int j = 0; j < N; j++) {
-            dRecord[index]->D[i][j] = mat->ten[i][j][i][j];
+            if (i == j) dRecord[index]->D[i][j] = mat->ten[i][j][i][j];
+            else dRecord[index]->D[i][j] = -4.0*mat->ten[i][j][i][j];
             H2Record[index]->D[i][j] = mat->mat[i][j];
-            // for (int k = 0; k < N; k++) {
-            //     for (int l = 0; l < N; l++) {
-            //         gRecord[index]->G[i][j][k][l] = mat->ten[i][j][k][l];
-            //     }
-            // }
         }
     }
     hRecord[index]->t = t;
     dRecord[index]->t = t;
     H2Record[index]->t = t;
-    // gRecord[index]->t = t;
 }
 
 void printH4(struct floet *mat) {
@@ -828,13 +884,20 @@ void printH4(struct floet *mat) {
 }
 
 void printH4interact(struct floet *mat) {
+    double num;
     for (int i = 0; i < N; i++) {
+        if (i == 0) printf("D  =   ");
+        else printf("       ");
         for (int j = 0; j < N; j++) {
-            if (i != j) printf("D[%d][%d]: %.5f ,\n",i,j,mat->ten[i][j][i][j]);
+            num = -4.0*mat->ten[i][j][i][j];
+            if (i == j) printf("%.5f",mat->ten[i][j][i][j]);
+            else if (num >= 0.0) printf("%.5f",num);
+            else printf("%.4f",num);
+            if (j != N-1) printf(", ");
         }
+        printf("\n");
     }
-    printf("\n");
-
+    printf("-----------------------------------\n\n-----------------------------------");
 }
 
 void checkHerm(struct floet *mat) {

@@ -299,7 +299,7 @@ void outputHamMathematica(const char *fileName, double** mat, double ****ten, in
     for (int i = 0; i < N; i++) {
         fprintf(fp,"{");
         for (int j = 0; j < N; j++) {
-            fprintf(fp,"%.5f", mat[i][j]);
+            fprintf(fp,"%.10f", mat[i][j]);
             if (j < N-1) fprintf(fp,",");
         }
         fprintf(fp,"}");
@@ -325,7 +325,7 @@ void outputHamMathematica(const char *fileName, double** mat, double ****ten, in
             for (int k = 0; k < N; k++) {
                 fprintf(fp,"{");
                 for (int l = 0; l < N; l++) {
-                    fprintf(fp,"%.5f", ten[i][j][k][l]);
+                    fprintf(fp,"%.16f", ten[i][j][k][l]);
                     if (l < N-1) fprintf(fp,",");
                 }
                 fprintf(fp,"}");
@@ -343,12 +343,16 @@ void outputHamMathematica(const char *fileName, double** mat, double ****ten, in
 
 void printMatrix(double **mat, int n) {
     for (int i = 0; i < n; i++) {
+        if (i == 0) printf("H(2) = ");
+        else printf("       ");
         for (int j = 0; j < n; j++) {
-            printf("%.3f",mat[i][j]);
+            if (mat[i][j] >= 0.0) printf("%.4f",mat[i][j]);
+            else printf("%.3f",mat[i][j]);
             if (j != n-1) printf(", ");
         }
         printf("\n");
     }
+    printf("\n");
 }
 
 void printErrorMatrix(double **mat, int n) {
@@ -381,7 +385,7 @@ void outputHRecord(const char *fileName, int n, int r, struct floardH **hR) {
 
     for (int i = 0; i < r; i++) {
         for (int j = 0; j < n; j++) {
-            fprintf(fp,"%d,%d,%.3f,%.8f\n", i, j, hR[i]->t, hR[i]->h[j]);
+            fprintf(fp,"%d,%d,%.3f,%.16f\n", i, j, hR[i]->t, hR[i]->h[j]);
         }
     }
     fclose(fp);
@@ -408,7 +412,7 @@ void outputDRecord(const char *fileName, int n, int r, struct floardD **dR) {
     for (int i = 0; i < r; i++) {
         for (int j = 0; j < n; j++) {
             for (int k = 0; k < n; k++) {
-                fprintf(fp,"%d,%d,%d,%.3f,%.3f\n", i, j, k, dR[i]->t, dR[i]->D[j][k]);
+                fprintf(fp,"%d,%d,%d,%.3f,%.16f\n", i, j, k, dR[i]->t, dR[i]->D[j][k]);
             }
         }
     }
@@ -438,7 +442,7 @@ void outputGRecord(const char *fileName, int n, int r, struct floardG **dR) {
             for (int k = 0; k < n; k++) {
                 for (int l = 0; l < n; l++) {
                     for (int q = 0; q < n; q++) {
-                        fprintf(fp,"%d,%d,%d,%d,%d,%.3f,%.5f\n", i, j, k, l, q, dR[i]->t, dR[i]->G[j][k][l][q]);
+                        fprintf(fp,"%d,%d,%d,%d,%d,%.3f,%.16f\n", i, j, k, l, q, dR[i]->t, dR[i]->G[j][k][l][q]);
                     }
                 }
             }

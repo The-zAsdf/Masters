@@ -11,6 +11,8 @@
 #include "distribution.h"
 #include "matOperations.cuh"
 
+// #define DEBUG
+
 #define NUMRECORDS 400
 #define ATTEMPTS 12
 #define MIN_SCALE_FACTOR 0.125
@@ -32,6 +34,7 @@ __managed__ double **invGausD;
 __managed__ double *uniform;
 __managed__ double *hRead;
 __managed__ ind **threadIndex;
+__managed__ ind **threadIndexOpt;
 
 __managed__ double W;
 __managed__ double D;
@@ -40,9 +43,12 @@ __managed__ double etol;
 __managed__ double J;
 __managed__ int N;
 __managed__ int numElem;    // Number of elements
+__managed__ int numElemOpt;    // Number of elements
 __managed__ double h;
 __managed__ size_t tpb;     // Threads per block
+__managed__ size_t tpbOpt;     // Threads per block
 __managed__ size_t nob;     // Number of blocks
+__managed__ size_t nobOpt;     // Number of blocks
 double l;                   // Total simulation steps
 
 floardH **hRecord;
@@ -163,12 +169,33 @@ void setVariables(struct Variables *v) {
             }
         }
     }
-    determineThreadsAndBlocks();
+
+    numElemOpt = 0;
+    for (int i = 0; i < N; i++) {
+        for (int j = i; j < N; j++) {
+            numElemOpt++;
+        }
+    }
+
+    for (int i = 0; i < N; i++) {
+        for (int j = i+1; j < N; j++) {
+            for (int k = 0; k < N; k++) {
+                for (int l = k+1; l < N; l++) {
+                    numElemOpt++;
+                }
+            }
+        }
+    }
+
+    determineThreadsAndBlocks(&nob, &tpb, numElem);
+    determineThreadsAndBlocks(&nobOpt, &tpbOpt, numElemOpt);
+    printf("numElem = %d, nob = %zd, tpb = %zd\n", numElem, nob, tpb);
+    printf("numElemOpt = %d, nobOpt = %zd, tpbOpt = %zd\n", numElemOpt, nobOpt, tpbOpt);
 }
 
-size_t calculateBlocks(size_t threads) {
+size_t calculateBlocks(size_t threads, int num) {
     size_t blocks = 1;
-    for (size_t i = threads; i < numElem; i += threads) {
+    for (size_t i = threads; i < num; i += threads) {
         if (blocks < threads*2 || threads == 1024) {
             blocks++;
         } else {
@@ -182,7 +209,7 @@ size_t calculateBlocks(size_t threads) {
  *  close as possible to the threads per block.
  *  Improves efficiency of CUDA calculations
  */
-void determineThreadsAndBlocks() {
+void determineThreadsAndBlocks(size_t *b, size_t *t, int num) {
     cudaDeviceProp props;
     int deviceId;
     size_t blocks;
@@ -191,10 +218,10 @@ void determineThreadsAndBlocks() {
     cudaGetDeviceProperties(&props, deviceId);
     do {
         threads += props.warpSize;
-        blocks = calculateBlocks(threads);
+        blocks = calculateBlocks(threads, num);
     } while (blocks == 0 && threads < 1024);
-    nob = blocks;
-    tpb = threads;
+    *b = blocks;
+    *t = threads;
 }
 
 __global__ void initStates(unsigned int seed, curandState_t* states) {
@@ -389,8 +416,15 @@ void init() {
     #endif
     err = cudaMallocManaged(&threadIndex, sizeof(struct index*)*numElem);
     if (err != cudaSuccess) CUDAERROR(err);
+
+    err = cudaMallocManaged(&threadIndexOpt, sizeof(struct index*)*numElemOpt);
+    if (err != cudaSuccess) CUDAERROR(err);
     for (int i = 0; i < numElem; i++) {
         err = cudaMallocManaged(&threadIndex[i], sizeof(struct index));
+        if (err != cudaSuccess) CUDAERROR(err);
+    }
+    for (int i = 0; i < numElemOpt; i++) {
+        err = cudaMallocManaged(&threadIndexOpt[i], sizeof(struct index));
         if (err != cudaSuccess) CUDAERROR(err);
     }
     #ifdef DEBUG
@@ -425,6 +459,40 @@ void init() {
             }
         }
     }
+
+    count = 0;
+    for (int i = 0; i < N; i++) {
+        for (int j = i; j < N; j++) {
+            threadIndexOpt[count]->i = i;
+            threadIndexOpt[count]->j = j;
+            threadIndexOpt[count]->k = -1;
+            threadIndexOpt[count]->l = -1;
+            count++;
+        }
+    }
+
+    for (int i = 0; i < N; i++) {
+        for (int j = i+1; j < N; j++) {
+            for (int k = 0; k < N; k++) {
+                for (int l = k+1; l < N; l++) {
+                    // each rank 4 element has a thread
+                    threadIndexOpt[count]->i = i;
+                    threadIndexOpt[count]->j = j;
+                    threadIndexOpt[count]->k = k;
+                    threadIndexOpt[count]->l = l;
+                    count++;
+                }
+            }
+        }
+    }
+
+    // for (int i = 0; i < count; i++) {
+    //     printf("ThreadOpt[%d] -> (%d,%d,%d,%d)\n", i,threadIndexOpt[i]->i
+    //                                                 ,threadIndexOpt[i]->j
+    //                                                 ,threadIndexOpt[i]->k
+    //                                                 ,threadIndexOpt[i]->l);
+    // }
+    // exit(0);
     #ifdef DEBUG
     printf("Done\n");
 
@@ -529,13 +597,13 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     double num;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
 
-        if (k == -1 && l == -1 && i >= j) {
+        if (k == -1 && l == -1 && i <= j) {
             kM->mat[i][j] = 0.0;
             // [eta(2),H(2)]
             for (int q = 0; q < N; q++) {
@@ -545,7 +613,7 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
             if (i != j) kM->mat[j][i] = kM->mat[i][j];
         } else if (k != -1 && l != -1) {
             kM->ten[i][j][k][l] = 0.0;
-            if (i > j && k > l) {
+            if (i < j && k < l) {
                 num = 0.0;
                 // [eta(2),H(4)] + [eta(4),H(2)]
                 for (int q = 0; q < N; q++) {
@@ -577,73 +645,67 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
 }
 
 void DP () {
-    RESET<<<nob, tpb>>>(gen);
+    GENERATOR<<<nobOpt,tpbOpt>>>(master, gen);
     checkCudaSyncErr();
 
-    GENERATOR<<<nob, tpb>>>(master, gen);
+    DOUBLECOPY<<<nob,tpb>>>(master,temp,prev);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[0], temp);
     checkCudaSyncErr();
 
-    COPY<<<nob,tpb>>>(master,prev);
+    DPSLOPE1<<<nobOpt, tpbOpt>>>(kMat, temp);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[0], temp);
-    checkCudaSyncErr();
-
-    DPSLOPE1<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[1], temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[1], temp);
     checkCudaSyncErr();
 
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
 
-    DPSLOPE2<<<nob, tpb>>>(kMat, temp);
+    DPSLOPE2<<<nobOpt, tpbOpt>>>(kMat, temp);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[2], temp);
-    checkCudaSyncErr();
-
-    COPY<<<nob,tpb>>>(master,temp);
-    checkCudaSyncErr();
-
-    DPSLOPE3<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[3], temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[2], temp);
     checkCudaSyncErr();
 
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
 
-    DPSLOPE4<<<nob, tpb>>>(kMat, temp);
+    DPSLOPE3<<<nobOpt, tpbOpt>>>(kMat, temp);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[4], temp);
-    checkCudaSyncErr();
-
-    COPY<<<nob,tpb>>>(master,temp);
-    checkCudaSyncErr();
-
-    DPSLOPE5<<<nob, tpb>>>(kMat, temp);
-    checkCudaSyncErr();
-
-    CALCSLOPE<<<nob,tpb>>>(kMat[5], temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[3], temp);
     checkCudaSyncErr();
 
     COPY<<<nob,tpb>>>(master,temp);
     checkCudaSyncErr();
 
-    DPSLOPE6<<<nob, tpb>>>(kMat, temp);
+    DPSLOPE4<<<nobOpt, tpbOpt>>>(kMat, temp);
     checkCudaSyncErr();
 
-    CALCSLOPE<<<nob,tpb>>>(kMat[6], temp);
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[4], temp);
     checkCudaSyncErr();
 
-    SUMDP<<<nob,tpb>>>(kMat, master, ct);
+    COPY<<<nob,tpb>>>(master,temp);
+    checkCudaSyncErr();
+
+    DPSLOPE5<<<nobOpt, tpbOpt>>>(kMat, temp);
+    checkCudaSyncErr();
+
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[5], temp);
+    checkCudaSyncErr();
+
+    COPY<<<nob,tpb>>>(master,temp);
+    checkCudaSyncErr();
+
+    DPSLOPE6<<<nobOpt, tpbOpt>>>(kMat, temp);
+    checkCudaSyncErr();
+
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[6], temp);
+    checkCudaSyncErr();
+
+    SUMDP<<<nobOpt, tpbOpt>>>(kMat, master, ct);
     checkCudaSyncErr();
 
     DPERROR<<<nob, tpb>>>(kMat, temp);
@@ -726,7 +788,7 @@ void embeddedDP () {
     }
 }
 
-double runPRBM(struct Variables *v) {
+double runFES(struct Variables *v) {
     #ifndef SUPPRESSOUTPUT
     printf("Setting variables:\n");
     #endif
@@ -735,6 +797,9 @@ double runPRBM(struct Variables *v) {
     printf("Done\nInitializing:... ");
     #endif
     init();
+    #ifndef SUPPRESSOUTPUT
+    printf("Done\nOutput initial Hamiltonian:... ");
+    #endif
     outputH2Qu("H2", master->mat, N);
     outputHamMathematica("i", master->mat,master->ten, N);
     #ifndef SUPPRESSOUTPUT

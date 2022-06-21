@@ -2,8 +2,8 @@ import random as rd
 import math as m
 import csv
 
-def writeh(h, L):
-    file = open("input/h.txt", "w")
+def writeh(h, L, ext):
+    file = open("input/h_{}.txt".format(ext), "w")
     for i in range(L):
         file.write(f"{h[i]}\n")
     file.close()
@@ -27,24 +27,8 @@ def getInput(fileName):
     file.close()
     return rows
 
-def hr(phi, W):
-    return W*m.cosh(2.0*m.pi/phi)*m.cos(2.0*m.pi*rd.random())
-
-def inith(W,L,phi):
-    h = []
-    for i in range(L):
-        h.append(hr(phi,W))
-
-    writeh(h,L)
-
-def hBR(W,L):
-    inith(W,L,(3.0+m.sqrt(13.0))/2.0)
-
-def hSR(W,L):
-    inith(W,L,(1.0+m.sqrt(2.0)))
-
-def hGR(W,L):
-    inith(W,L,(1.0+m.sqrt(5.0))/2.0)
+def hr(phi,W,i,th=0):
+    return W*m.cos(2.0*i*m.pi/phi+th)
 
 def main():
     rd.seed()
@@ -57,13 +41,17 @@ def main():
     SR = (1.0+m.sqrt(2.0))
     GR = (1.0+m.sqrt(5.0))/2.0
 
-    h = []
+    h_BR = []
+    h_SR = []
+    h_GR = []
     for i in range(L):
-        h.append(hr(BR,W))
-        # h.append(hr(SR,W))
-        # h.append(hr(GR,W))
+        h_BR.append(hr(BR,W,i))
+        h_SR.append(hr(SR,W,i))
+        h_GR.append(hr(GR,W,i))
 
-    writeh(h,L)
+    writeh(h_BR,L,"BR")
+    writeh(h_SR,L,"SR")
+    writeh(h_GR,L,"GR")
 
 if __name__ == "__main__":
     main()

@@ -30,6 +30,30 @@ __global__ void COPY(struct floet *src, struct floet *dst) {
     }
 }
 
+__global__ void DOUBLECOPY(struct floet *src, struct floet *dst1, struct floet *dst2) {
+    extern __managed__ int numElem;
+    extern __managed__ ind **threadIndex;
+    extern __managed__ int N;
+    int i, j, k, l;
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (id < numElem) {
+        i = threadIndex[id]->i;
+        j = threadIndex[id]->j;
+        k = threadIndex[id]->k;
+        l = threadIndex[id]->l;
+
+        if (k == -1 && l == -1) {
+            dst1->mat[i][j] = src->mat[i][j];
+            dst2->mat[i][j] = src->mat[i][j];
+        }
+        else {
+            dst1->ten[i][j][k][l] = src->ten[i][j][k][l];
+            dst2->ten[i][j][k][l] = src->ten[i][j][k][l];
+        }
+    }
+}
+
 __global__ void RESET(struct floet *mat) {
     extern __managed__ int numElem;
     extern __managed__ ind **threadIndex;
@@ -68,71 +92,50 @@ __global__ void TEST(struct floet *mat) {
 }
 
 
-
-// TODO: Change to interacting basis for practice
-// __global__ void MULT(double **a, double **b, double **save) {
-//     extern __managed__ int numElem;
-//     extern __managed__ ind **threadIndex;
-//     extern __managed__ int N;
-//     int i;
-//     int j;
-//     int id = blockIdx.x * blockDim.x + threadIdx.x;
-//
-//     if (id < numElem) {
-//         i = threadIndex[id]->x;
-//         j = threadIndex[id]->y;
-//         for (int k = 0; k < N; k++) {
-//             save[i][j] += a[min(i,k)][abs(i-k)]*b[min(j,k)][abs(j-k)];
-//         }
-//     }
-// }
-
 __global__ void GENERATOR(struct floet *src, struct floet *eta) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ int N;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
 
-        if (k == -1 && l == -1 && i >= j) { // if i == j then eta_{ij} = 0
+        if (k == -1 && l == -1 && i < j) { // if i == j then eta_{ij} = 0
             eta->mat[i][j] = src->mat[i][j]*(src->mat[i][i] - src->mat[j][j]);
             if (i != j) eta->mat[j][i] = -eta->mat[i][j];
-        } else if (k != -1 && l != -1) {
-            if (i < j && k < l) {
-                // [H0(2), H(4)]
-                eta->ten[i][j][k][l] = src->ten[i][j][k][l]*(src->mat[i][i]
-                                     + src->mat[j][j] - src->mat[k][k]
-                                     - src->mat[l][l]);
+        } else if (k != -1 && l != -1 && (i < j && k < l)) {
+            // [H0(2), H(4)]
+            eta->ten[i][j][k][l] = src->ten[i][j][k][l]*(src->mat[i][i]
+                                 + src->mat[j][j] - src->mat[k][k]
+                                 - src->mat[l][l]);
 
-                // [H0(4), H(2)]
-                if (i == k) {
-                    eta->ten[i][j][k][l] += src->mat[j][l]*(src->ten[i][j][i][j]
-                                          - src->ten[l][i][l][i]);
-                } if (i == l) {
-                    eta->ten[i][j][k][l] += src->mat[j][k]*(src->ten[k][i][k][i]
-                                          - src->ten[i][j][i][j]);
-                } if (j == k) {
-                    eta->ten[i][j][k][l] += src->mat[i][l]*(src->ten[l][j][l][j]
-                                          - src->ten[i][j][i][j]);
-                } if (j == l) {
-                    eta->ten[i][j][k][l] += src->mat[i][k]*(src->ten[i][j][i][j]
-                                          - src->ten[k][j][k][j]);
-                }
-                // [H0(4), H(4)]
-                eta->ten[i][j][k][l] += 4.0*(src->ten[k][l][k][l]
-                                      - src->ten[i][j][i][j])*src->ten[i][j][k][l];
-
-                // Symmmetries
-                eta->ten[j][i][k][l] = - eta->ten[i][j][k][l];
-                eta->ten[i][j][l][k] = - eta->ten[i][j][k][l];
-                eta->ten[j][i][l][k] = eta->ten[i][j][k][l];
+            // [H0(4), H(2)]
+            if (i == k) {
+                eta->ten[i][j][k][l] += src->mat[j][l]*(src->ten[i][j][i][j]
+                                      - src->ten[l][i][l][i]);
+            } if (i == l) {
+                eta->ten[i][j][k][l] += src->mat[j][k]*(src->ten[k][i][k][i]
+                                      - src->ten[i][j][i][j]);
+            } if (j == k) {
+                eta->ten[i][j][k][l] += src->mat[i][l]*(src->ten[l][j][l][j]
+                                      - src->ten[i][j][i][j]);
+            } if (j == l) {
+                eta->ten[i][j][k][l] += src->mat[i][k]*(src->ten[i][j][i][j]
+                                      - src->ten[k][j][k][j]);
             }
+            // [H0(4), H(4)]
+            eta->ten[i][j][k][l] += 4.0*(src->ten[k][l][k][l]
+                                  - src->ten[i][j][i][j])*src->ten[i][j][k][l];
+
+            // Symmmetries
+            eta->ten[j][i][k][l] = -eta->ten[i][j][k][l];
+            eta->ten[i][j][l][k] = -eta->ten[i][j][k][l];
+            eta->ten[j][i][l][k] = eta->ten[i][j][k][l];
         }
     }
 }
@@ -154,20 +157,20 @@ __global__ void ADD(struct floet *src, struct floet *dst) {
 }
 
 __global__ void SUMDP(struct floet **kM, struct floet *dst, double ct) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ double h;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     double num;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
 
-        if (k == -1 && l == -1 && i >= j) {
+        if (k == -1 && l == -1 && i <= j) {
             dst->mat[i][j] += h*(0.0862*kM[0]->mat[i][j] + 0.666*kM[2]->mat[i][j]
                             - 0.7857*kM[3]->mat[i][j] + 0.9570*kM[4]->mat[i][j]
                             + 0.0965*kM[5]->mat[i][j] - 0.02*kM[6]->mat[i][j]);
@@ -203,19 +206,20 @@ __global__ void SUMDP(struct floet **kM, struct floet *dst, double ct) {
 }
 
 __global__ void DPSLOPE1(struct floet **kM, struct floet *dst) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ double h;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     double num;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
-        if (k == -1 && l == -1 && i >= j) {
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
+
+        if (k == -1 && l == -1 && i <= j) {
             dst->mat[i][j] += r_2_9*h*kM[0]->mat[i][j];
             if (i != j) dst->mat[j][i] = dst->mat[i][j];
         } else if (k != -1 && l != -1) {
@@ -232,19 +236,20 @@ __global__ void DPSLOPE1(struct floet **kM, struct floet *dst) {
 }
 
 __global__ void DPSLOPE2(struct floet **kM, struct floet *dst) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ double h;
     double num;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
-        if (k == -1 && l == -1 && i >= j) {
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
+
+        if (k == -1 && l == -1 && i <= j) {
             dst->mat[i][j] += r_12*h*(kM[0]->mat[i][j] + 3.0*kM[1]->mat[i][j]);
             if (i != j) dst->mat[j][i] = dst->mat[i][j];
         } else if (k != -1 && l != -1) {
@@ -262,19 +267,20 @@ __global__ void DPSLOPE2(struct floet **kM, struct floet *dst) {
 }
 
 __global__ void DPSLOPE3(struct floet **kM, struct floet *dst) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ double h;
     double num;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
-        if (k == -1 && l == -1 && i >= j) {
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
+
+        if (k == -1 && l == -1 && i <= j) {
             dst->mat[i][j] += r_324*h*(55.0*kM[0]->mat[i][j]
                             - 75.0*kM[1]->mat[i][j]
                             + 200.0*kM[2]->mat[i][j]);
@@ -295,19 +301,20 @@ __global__ void DPSLOPE3(struct floet **kM, struct floet *dst) {
 }
 
 __global__ void DPSLOPE4(struct floet **kM, struct floet *dst) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ double h;
     double num;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
-        if (k == -1 && l == -1 && i >= j) {
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
+
+        if (k == -1 && l == -1 && i <= j) {
             dst->mat[i][j] += r_330*h*(83.0*kM[0]->mat[i][j]
                             - 195.0*kM[1]->mat[i][j]
                             + 305.0*kM[2]->mat[i][j]
@@ -330,19 +337,19 @@ __global__ void DPSLOPE4(struct floet **kM, struct floet *dst) {
 }
 
 __global__ void DPSLOPE5(struct floet **kM, struct floet *dst) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ double h;
     double num;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
-        if (k == -1 && l == -1 && i >= j) {
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
+        if (k == -1 && l == -1 && i <= j) {
             dst->mat[i][j] += r_28*h*(-19.0*kM[0]->mat[i][j]
                             + 63.0*kM[1]->mat[i][j]
                             + 4.0*kM[2]->mat[i][j]
@@ -367,19 +374,20 @@ __global__ void DPSLOPE5(struct floet **kM, struct floet *dst) {
 }
 
 __global__ void DPSLOPE6(struct floet **kM, struct floet *dst) {
-    extern __managed__ int numElem;
-    extern __managed__ ind **threadIndex;
+    extern __managed__ int numElemOpt;
+    extern __managed__ ind **threadIndexOpt;
     extern __managed__ double h;
     double num;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (id < numElem) {
-        i = threadIndex[id]->i;
-        j = threadIndex[id]->j;
-        k = threadIndex[id]->k;
-        l = threadIndex[id]->l;
-        if (k == -1 && l == -1 && i >= j) {
+    if (id < numElemOpt) {
+        i = threadIndexOpt[id]->i;
+        j = threadIndexOpt[id]->j;
+        k = threadIndexOpt[id]->k;
+        l = threadIndexOpt[id]->l;
+
+        if (k == -1 && l == -1 && i <= j) {
             dst->mat[i][j] += 0.0025*h*(38.0*kM[0]->mat[i][j]
                             + 240.0*kM[2]->mat[i][j]
                             - 243.0*kM[3]->mat[i][j]
