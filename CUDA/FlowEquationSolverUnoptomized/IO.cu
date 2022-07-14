@@ -123,58 +123,6 @@ void outputData (const char *fileName, double y) {
     fclose(fp);
 }
 
-void outputDiag(const char *fileName, double ***hist, int len, int n) {
-    FILE *fp;
-    char str[255];
-    const char *dir = "data/";
-    const char *ext = ".txt";
-    strcpy(str, dir);
-    strcat(str, fileName);
-    strcat(str, ext);
-
-    if ((fp = fopen(str,"w+")) == NULL) {
-        fprintf(stderr, "Error: File cannot be created\n");
-        exit(-1);
-    }
-
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < len; j++) {
-            fprintf(fp,"%f",hist[j][i][0]);
-            if (j < len -1) fprintf(fp,",");
-        }
-        fprintf(fp,"\n");
-    }
-    fclose(fp);
-}
-
-void outputElements(const char *fileName, double ***hist, int len, int n) {
-    FILE *fp;
-    char str[255];
-    const char *dir = "data/";
-    const char *ext = ".txt";
-
-    strcpy(str, dir);
-    strcat(str, fileName);
-    strcat(str, ext);
-
-    if ((fp = fopen(str,"w+")) == NULL) {
-        fprintf(stderr, "Error: File cannot be created\n");
-        exit(-1);
-    }
-
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n-i; j++) {
-            fprintf(fp,"{%d,%d},",i,j);
-            for (int k = 0; k < len; k++) {
-                fprintf(fp,"%f",hist[k][i][j]);
-                if (k != n-1) fprintf(fp,",");
-            }
-            fprintf(fp,"\n");
-        }
-    }
-    fclose(fp);
-}
-
 void printVar(Var *var) {
     printf("W: %f\n", var->W);
     printf("J: %f\n", var->J);
@@ -299,7 +247,7 @@ void outputHamMathematica(const char *fileName, double** mat, double ****ten, in
     for (int i = 0; i < N; i++) {
         fprintf(fp,"{");
         for (int j = 0; j < N; j++) {
-            fprintf(fp,"%.10f", mat[i][j]);
+            fprintf(fp,"%.16f", mat[i][j]);
             if (j < N-1) fprintf(fp,",");
         }
         fprintf(fp,"}");
@@ -385,7 +333,7 @@ void outputHRecord(const char *fileName, int n, int r, struct floardH **hR) {
 
     for (int i = 0; i < r; i++) {
         for (int j = 0; j < n; j++) {
-            fprintf(fp,"%d,%d,%.3f,%.16f\n", i, j, hR[i]->t, hR[i]->h[j]);
+            fprintf(fp,"%d,%d,%.3f,%.12f\n", i, j, hR[i]->t, hR[i]->h[j]);
         }
     }
     fclose(fp);
@@ -412,7 +360,7 @@ void outputDRecord(const char *fileName, int n, int r, struct floardD **dR) {
     for (int i = 0; i < r; i++) {
         for (int j = 0; j < n; j++) {
             for (int k = 0; k < n; k++) {
-                fprintf(fp,"%d,%d,%d,%.3f,%.16f\n", i, j, k, dR[i]->t, dR[i]->D[j][k]);
+                fprintf(fp,"%d,%d,%d,%.3f,%.12f\n", i, j, k, dR[i]->t, dR[i]->D[j][k]);
             }
         }
     }
@@ -470,55 +418,7 @@ void outputiRecord(const char *fileName, int n, int r, struct floardF **dR) {
     fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "invariant");
 
     for (int i = 0; i < r; i++) {
-        fprintf(fp,"%d,%.3f,%.3f\n", i, dR[i]->t, dR[i]->f);
-    }
-    fclose(fp);
-}
-
-void outputH2Record(const char *fileName, int n, int r, struct floardF **dR) {
-
-    FILE *fp;
-    char str[255];
-    const char *dir = "data/";
-    const char *ext = ".txt";
-
-    strcpy(str, dir);
-    strcat(str, fileName);
-    strcat(str, ext);
-
-    if ((fp = fopen(str,"w+")) == NULL) {
-        fprintf(stderr, "Error: File cannot be created\n");
-        exit(-1);
-    }
-
-    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "invariant");
-
-    for (int i = 0; i < r; i++) {
-        fprintf(fp,"%d,%.3f,%.5f\n", i, dR[i]->t, dR[i]->f);
-    }
-    fclose(fp);
-}
-
-void outputH4Record(const char *fileName, int n, int r, struct floardF **dR) {
-
-    FILE *fp;
-    char str[255];
-    const char *dir = "data/";
-    const char *ext = ".txt";
-
-    strcpy(str, dir);
-    strcat(str, fileName);
-    strcat(str, ext);
-
-    if ((fp = fopen(str,"w+")) == NULL) {
-        fprintf(stderr, "Error: File cannot be created\n");
-        exit(-1);
-    }
-
-    fprintf(fp,"%d,%d,%s,%s\n", r, n, "time", "invariant");
-
-    for (int i = 0; i < r; i++) {
-        fprintf(fp,"%d,%.3f,%.5f\n", i, dR[i]->t, dR[i]->f);
+        fprintf(fp,"%d,%.3f,%.12f\n", i, dR[i]->t, dR[i]->f);
     }
     fclose(fp);
 }

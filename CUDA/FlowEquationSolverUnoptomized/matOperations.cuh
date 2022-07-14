@@ -141,7 +141,6 @@ __global__ void SUMDP(struct floet **kM, struct floet *dst, double ct) {
     extern __managed__ double h;
     int i, j, k, l;
     int id = blockIdx.x * blockDim.x + threadIdx.x;
-    double num;
 
     if (id < numElemOpt) {
         i = threadIndexOpt[id]->i;
@@ -150,35 +149,34 @@ __global__ void SUMDP(struct floet **kM, struct floet *dst, double ct) {
         l = threadIndexOpt[id]->l;
 
         if (k == -1 && l == -1 && i <= j) {
-            dst->mat[i][j] += h*(0.0862*kM[0]->mat[i][j] + 0.666*kM[2]->mat[i][j]
+            dst->mat[i][j] += h*(0.0862*kM[0]->mat[i][j] + 0.6660*kM[2]->mat[i][j]
                             - 0.7857*kM[3]->mat[i][j] + 0.9570*kM[4]->mat[i][j]
-                            + 0.0965*kM[5]->mat[i][j] - 0.02*kM[6]->mat[i][j]);
-            if (fabs(dst->mat[i][j]) < ct) dst->mat[i][j] = 0.0;
+                            + 0.0965*kM[5]->mat[i][j] - 0.0200*kM[6]->mat[i][j]);
+            // if (fabs(dst->mat[i][j]) < ct) dst->mat[i][j] = 0.0;
             if (i != j) dst->mat[j][i] = dst->mat[i][j];
         } else if (k != -1 && l != -1) {
             if (i < j && k < l) {
-                num = h*(0.0862*kM[0]->ten[i][j][k][l]
-                    + 0.666*kM[2]->ten[i][j][k][l]
+                dst->ten[i][j][k][l] += h*(0.0862*kM[0]->ten[i][j][k][l]
+                    + 0.6660*kM[2]->ten[i][j][k][l]
                     - 0.7857*kM[3]->ten[i][j][k][l]
                     + 0.9570*kM[4]->ten[i][j][k][l]
                     + 0.0965*kM[5]->ten[i][j][k][l]
-                    - 0.02*kM[6]->ten[i][j][k][l]);
+                    - 0.0200*kM[6]->ten[i][j][k][l]);
 
-                if (fabs(dst->ten[i][j][k][l] + num) < ct) {
-                    dst->ten[i][j][k][l] = 0.0;
-                    dst->ten[j][i][k][l] = 0.0;
-                    dst->ten[i][j][l][k] = 0.0;
-                    dst->ten[j][i][l][k] = 0.0;
-                } else {
-                    dst->ten[i][j][k][l] += num;
-                    dst->ten[j][i][k][l] -= num;
-                    dst->ten[i][j][l][k] -= num;
-                    dst->ten[j][i][l][k] += num;
-                }
-                // dst->ten[i][j][k][l] += num;
-                // dst->ten[j][i][k][l] -= num;
-                // dst->ten[i][j][l][k] -= num;
-                // dst->ten[j][i][l][k] += num;
+                // if (fabs(dst->ten[i][j][k][l] + num) < ct) {
+                //     dst->ten[i][j][k][l] = 0.0;
+                //     dst->ten[j][i][k][l] = 0.0;
+                //     dst->ten[i][j][l][k] = 0.0;
+                //     dst->ten[j][i][l][k] = 0.0;
+                // } else {
+                //     dst->ten[i][j][k][l] += num;
+                //     dst->ten[j][i][k][l] -= num;
+                //     dst->ten[i][j][l][k] -= num;
+                //     dst->ten[j][i][l][k] += num;
+                // }
+                dst->ten[j][i][k][l] = -dst->ten[i][j][k][l];
+                dst->ten[i][j][l][k] = -dst->ten[i][j][k][l];
+                dst->ten[j][i][l][k] = dst->ten[i][j][k][l];
             }
         }
     }

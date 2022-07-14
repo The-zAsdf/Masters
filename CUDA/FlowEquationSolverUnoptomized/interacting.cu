@@ -636,6 +636,65 @@ __global__ void CALCSLOPE(struct floet *kM, struct floet *mat) {
     }
 }
 
+void RKStep() {
+    GENERATOR<<<nobOpt,tpbOpt>>>(master, gen);
+    checkCudaSyncErr();
+
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[0], master);
+    checkCudaSyncErr();
+
+    DPSLOPE1<<<nobOpt, tpbOpt>>>(kMat, temp, master);
+    checkCudaSyncErr();
+
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[1], temp);
+    checkCudaSyncErr();
+
+    DPSLOPE2<<<nobOpt, tpbOpt>>>(kMat, temp, master);
+    checkCudaSyncErr();
+
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[2], temp);
+    checkCudaSyncErr();
+
+    DPSLOPE3<<<nobOpt, tpbOpt>>>(kMat, temp, master);
+    checkCudaSyncErr();
+
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[3], temp);
+    checkCudaSyncErr();
+
+    DPSLOPE4<<<nobOpt, tpbOpt>>>(kMat, temp, master);
+    checkCudaSyncErr();
+
+    CALCSLOPE<<<nobOpt,tpbOpt>>>(kMat[4], temp);
+    checkCudaSyncErr();
+
+    SUMDP<<<nobOpt, tpbOpt>>>(kMat, master, ct);
+    checkCudaSyncErr();
+}
+
+void embeddedRK() {
+    double s = 0.0;
+    copyToRecords(master, s, r);
+    r++;
+    checkHerm(master);
+    #ifndef SUPPRESSOUTPUT
+    printMatrix(master->mat, N);
+    printH4interact(master);
+    #endif
+
+    while (s < l) {
+        RKStep();
+        s += h;
+        #ifndef SUPPRESSOUTPUT
+        printMatrix(master->mat, N);
+        printH4interact(master);
+        printf("\n");
+        #endif
+        copyToRecords(master, s, r);
+        if (r < NUMRECORDS) r++;
+        printf("s = %.4f, h = %.4f, r = %d\n", s, h, r);
+    }
+}
+
 void DP () {
     GENERATOR<<<nobOpt,tpbOpt>>>(master, gen);
     checkCudaSyncErr();

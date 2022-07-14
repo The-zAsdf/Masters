@@ -4,6 +4,7 @@ import csv
 import Qu
 import numpy as np
 import genh
+import math as m
 from trace import calcInvars
 from trace import relativeErrorInvar
 from trace import calcRelativeErrorInvar
@@ -128,7 +129,7 @@ def runFES(W,J,D,h,S,L,e,c):
     print(f"  e = {e:g} (accuracy)")
     print(f"  cutoff = {c:g} (accuracy)")
     # Usage: main <W> <J> <D> <h> <S> <N> <e> <c>
-    p = sub.run(["main",f"{W}",f"{J}",f"{D}",f"{h}",f"{S}",f"{L}",f"{e:g}",f"{c:g}"])
+    p = sub.run(["./main",f"{W}",f"{J}",f"{D}",f"{h}",f"{S}",f"{L}",f"{e:g}",f"{c:g}"])
     # p = sub.run("main")
     confirmExitCode(p.returncode, "main")
     print("FES finished. Run time: {}\n".format(getRuntime()))
@@ -215,13 +216,12 @@ def main():
     h = readInput('h', rows)
     S = readInput('S', rows)
     # f = int(readInput('f', rows))
-    f = 2
+    f = 1
 
     # Create new inital h values for FES
     # genh.hBR(W,L)
     # genh.hSR(W,L)
-    # genh.hGR(W,L)
-    # quit(0)
+    genh.hGR(W,L)
     # Run FES
     runFES(W,J,D,h,S,L,e,c)
 
@@ -260,6 +260,7 @@ def main():
     print("I(l=0)   = {}".format(I0))
     print("I(l=inf) = {}".format(Iinf))
     print("Relative error (invariance): dI = {}".format(relativeErrorInvar(I0,Iinf)))
+    print("Relative error (invariance): log10(dI) = {}".format(m.log10(relativeErrorInvar(I0,Iinf))))
     # q = invarVsL()
 
 
