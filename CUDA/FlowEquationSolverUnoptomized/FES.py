@@ -107,7 +107,6 @@ def gethFES(L):
         q.append(float(rows[index+i][3]))
 
     # return reversed list, corresponds to ED evals
-    # return q[::-1]
     return q
 
 # Calculate the relative error of eigenvalues
@@ -197,7 +196,6 @@ def evalComb(h,D,L,Nf):
         for j in range(Nf):
             b += h[i[j]]
         for j in list(csub):
-            # THIS SHOULD BE -= DUE TO CONVENTION CHANGING
             b += D[j[0]][j[1]]
         q.append(b)
     return q
@@ -216,14 +214,14 @@ def main():
     h = readInput('h', rows)
     S = readInput('S', rows)
     # f = int(readInput('f', rows))
-    f = 1
+    f = 3
 
     # Create new inital h values for FES
     # genh.hBR(W,L)
     # genh.hSR(W,L)
-    genh.hGR(W,L)
+    # genh.hGR(W,L)
     # Run FES
-    runFES(W,J,D,h,S,L,e,c)
+    # runFES(W,J,D,h,S,L,e,c)
 
     # Do exact diagonlization calculations through Quspin
     print("Calculcation ED:")
