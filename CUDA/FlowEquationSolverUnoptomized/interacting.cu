@@ -185,8 +185,8 @@ void setVariables(struct Variables *v) {
 
     determineThreadsAndBlocks(&nob, &tpb, numElem);
     determineThreadsAndBlocks(&nobOpt, &tpbOpt, numElemOpt);
-    printf("numElem = %d, nob = %zd, tpb = %zd\n", numElem, nob, tpb);
-    printf("numElemOpt = %d, nobOpt = %zd, tpbOpt = %zd\n", numElemOpt, nobOpt, tpbOpt);
+    // printf("numElem = %d, nob = %zd, tpb = %zd\n", numElem, nob, tpb);
+    // printf("numElemOpt = %d, nobOpt = %zd, tpbOpt = %zd\n", numElemOpt, nobOpt, tpbOpt);
 }
 
 size_t calculateBlocks(size_t threads, int num) {
@@ -819,7 +819,7 @@ void embeddedDP () {
             if (last_interval) break;
             if (s + h > l) { last_interval = 1; h = l - s; }
             else if (s + h + 0.5*h > l) h = 0.5 * h;
-            printf("s = %.4f, h = %.4f, scaled = %.4f (%.4f), r = %d\n", s, h, scale, scaleprev, r);
+            printf("%.4f,%.4f,%.4f,%d\n", s, h, scale, r);
             scaleprev = scale;
         }
     }

@@ -10,9 +10,9 @@ int main(int argc, char *argv[]) {
     if (argc == 1) {
         readInput("input.txt", g);
         t = (double *) malloc(sizeof(double)*g->R);
-        // #ifndef SUPPRESSOUTPUT
+        #ifndef SUPPRESSOUTPUT
         printVar(g);
-        // #endif
+        #endif
 
         while (g->index < g->R) {
             t[g->index] = runFES(g);
@@ -21,7 +21,9 @@ int main(int argc, char *argv[]) {
         outputData("time",g->N,t, g->R);
     } else {
         readArgs(argc, argv, g);
+        #ifndef SUPPRESSOUTPUT
         printVar(g);
+        #endif
         t = (double *) malloc(sizeof(double));
         t[0] = runFES(g);
         outputData("time",t[0]);

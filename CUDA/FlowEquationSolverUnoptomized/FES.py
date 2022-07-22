@@ -1,113 +1,22 @@
 import os
 import subprocess as sub
-import csv
 import Qu
 import numpy as np
 import genh
 import math as m
+import pIO
+import csv
 from trace import calcInvars
 from trace import relativeErrorInvar
 from trace import calcRelativeErrorInvar
 from itertools import combinations as comb
-
-# Read the runtime of FES from file
-def getRuntime():
-    file = open("data/time.txt", "r")
-    csvreader = csv.reader(file)
-    rows = []
-    for row in csvreader:
-        rows.append(row)
-
-    file.close()
-    return rows[0][0]
+from tqdm import tqdm
 
 # Check that the FES program finished as expected
 def confirmExitCode(num,prog):
     if num != 0:
         raise Exception("ERROR: {} encountered an error ({})".format(prog,num))
         quit(-1)
-
-# Interprets array of input
-def readInputReturnEntries(char, input):
-    for entry in input:
-        if entry[0] == char:
-            return entry
-    raise Exception("ERROR: Input not found")
-    quit(-1)
-
-# Interprets the input
-def readInput(char, input):
-    for entry in input:
-        if entry[0] == char:
-            return float(entry[1])
-    raise Exception("ERROR: Input not found")
-    quit(-1)
-
-# Reads input from file
-def getInput(fileName):
-    file = open(fileName, "r")
-    csvreader = csv.reader(file, delimiter =' ')
-    rows = []
-    for row in csvreader:
-        rows.append(row)
-
-    file.close()
-    return rows
-
-def getDFES(L):
-    # Read from file, get D(l = inf) entries
-    file = open("data/D.txt", "r")
-    csvreader = csv.reader(file)
-    rows = []
-    for row in csvreader:
-        rows.append(row)
-    file.close()
-    c = -1
-    index = -1
-    count = 1
-    # find the index of the last entries
-    for i in range(1,len(rows)):
-        if int(rows[i][0]) > c:
-            c = int(rows[i][0])
-            index = count
-        count += 1
-    # store D values in q array
-    q = []
-    for i in range(L):
-        q.append([])
-        for j in range(L):
-            q[i].append(float(rows[index+i*L+j][4]))
-    # Reverse the array
-    # for i in range(L):
-    #     q[i] = q[i][::-1]
-    # q = q[::-1]
-    return q
-
-def gethFES(L):
-    # Read from file, get h(l = inf) entries
-    file = open("data/h.txt", "r")
-    csvreader = csv.reader(file)
-    rows = []
-    for row in csvreader:
-        rows.append(row)
-    file.close()
-    c = -1
-    index = -1
-    count = 1
-    # find the index of the last entries
-    for i in range(1,len(rows)):
-        if int(rows[i][0]) > c:
-            c = int(rows[i][0])
-            index = count
-        count += 1
-
-    # store h values in q array
-    q = []
-    for i in range(L):
-        q.append(float(rows[index+i][3]))
-
-    # return reversed list, corresponds to ED evals
-    return q
 
 # Calculate the relative error of eigenvalues
 def relativeError(evalED,evalFE,L):
@@ -117,6 +26,25 @@ def relativeError(evalED,evalFE,L):
     for i in range(len(evalED)):
         ep += abs((evalED[i]-evalFE[i])/evalED[i])
     return pow(0.5,L)*ep
+
+def runFESarg(arg, fileName):
+    print(f"W = {arg[0]}, J = {arg[1]}, D = {arg[2]}, S = {arg[4]}, L = {arg[5]}")
+    p = sub.Popen(["./main",f"{arg[0]}",f"{arg[1]}",f"{arg[2]}",f"{arg[3]}",f"{arg[4]}",f"{arg[5]}",f"{arg[6]:g}",f"{arg[7]:g}"], stdout=sub.PIPE, universal_newlines=True)
+    pbar = tqdm(total = arg[4], desc = 'FES progress', dynamic_ncols = True, bar_format = '{l_bar}{bar}| [{elapsed}]', leave = False)
+    for line in p.stdout:
+        output = line.replace('\n','')
+        output = output.split(',')
+        pbar.update(float(output[1]))
+    pbar.close()
+    p.wait()
+    confirmExitCode(p.returncode, "main")
+    print("Run time: {}\n\n".format(pIO.getRuntime()))
+
+    Inv = calcRelativeErrorInvar()
+    file = open(fileName, 'a')
+    file.write(f"{arg[0]/arg[1]},{arg[2]/arg[1]},{arg[5]},{Inv},{m.log10(Inv)}\n")
+    file.close()
+
 
 def runFES(W,J,D,h,S,L,e,c):
     # Run FES
@@ -135,15 +63,15 @@ def runFES(W,J,D,h,S,L,e,c):
 
 def invarVsL():
     #varying W,N only
-    rows=getInput("comb.txt")
-    W = readInputReturnEntries('W',rows)
-    L = readInputReturnEntries('N',rows)
-    J = readInput('J', rows)
-    D = readInput('D', rows)
-    e = readInput('e', rows)
-    h = readInput('h', rows)
-    S = readInput('S', rows)
-    c = readInput('c', rows)
+    rows=pIO.getInput("comb.txt")
+    W = pIO.readInputReturnEntries('W',rows)
+    L = pIO.readInputReturnEntries('N',rows)
+    J = pIO.readInput('J', rows)
+    D = pIO.readInput('D', rows)
+    e = pIO.readInput('e', rows)
+    h = pIO.readInput('h', rows)
+    S = pIO.readInput('S', rows)
+    c = pIO.readInput('c', rows)
 
     q = []
     for i in range(1,len(W)):
@@ -204,16 +132,16 @@ def main():
     dir = os.getcwd()
 
     # Read input (used for Quspin)
-    rows=getInput("input.txt")
-    W = readInput('W', rows)
-    J = readInput('J', rows)
-    D = readInput('D', rows)
-    L = int(readInput('N', rows))
-    e = readInput('e', rows)
-    c = readInput('c', rows)
-    h = readInput('h', rows)
-    S = readInput('S', rows)
-    # f = int(readInput('f', rows))
+    rows=pIO.getInput("input.txt")
+    W = pIO.readInput('W', rows)
+    J = pIO.readInput('J', rows)
+    D = pIO.readInput('D', rows)
+    L = int(pIO.readInput('N', rows))
+    e = pIO.readInput('e', rows)
+    c = pIO.readInput('c', rows)
+    h = pIO.readInput('h', rows)
+    S = pIO.readInput('S', rows)
+    # f = int(pIO.readInput('f', rows))
     f = 3
 
     # Create new inital h values for FES
@@ -229,8 +157,8 @@ def main():
     evalED,estates = H.eigh()
     print("ED finished.\n")
     # Get FE h & D
-    hFE = gethFES(L)
-    DFE = getDFES(L)
+    hFE = pIO.gethFES(L)
+    DFE = pIO.getDFES(L)
     # Do combinatorics to obtain evals corresponding to ED states
     evalFEcomb = evalComb(hFE,DFE,L,f)
 

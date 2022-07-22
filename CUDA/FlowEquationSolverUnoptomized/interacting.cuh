@@ -1,7 +1,7 @@
 #ifndef INTERACTING_CUH
 #define INTERACTING_CUH
 
-// #define SUPPRESSOUTPUT
+#define SUPPRESSOUTPUT
 
 typedef struct index{
     int i;
